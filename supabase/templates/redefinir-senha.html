@@ -1,0 +1,24 @@
+<!--
+  Supabase → Authentication → Emails → Reset password
+  Assunto: Nova senha do Pulse · Efic
+  Cole no campo "Message body" tudo o que está abaixo deste comentário.
+-->
+<div style="font-family: Arial, Helvetica, sans-serif; color: #1c2430; max-width: 480px; margin: 0 auto; padding: 24px;">
+  <p style="font-size: 24px; font-weight: bold; color: #0f5b78; margin: 0 0 24px;">Pulse</p>
+  <p style="font-size: 16px; line-height: 1.5;">Olá!</p>
+  <p style="font-size: 16px; line-height: 1.5;">
+    Recebemos um pedido para definir uma nova senha no Pulse.
+    Clique no botão abaixo para escolher a nova senha.
+  </p>
+  <p style="margin: 32px 0;">
+    <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery"
+       style="background: #0f5b78; color: #ffffff; text-decoration: none; padding: 14px 24px; border-radius: 8px; font-size: 16px; display: inline-block;">
+      Definir nova senha
+    </a>
+  </p>
+  <p style="font-size: 14px; line-height: 1.5; color: #5b6573;">
+    O link vale por tempo limitado e só pode ser usado uma vez.
+    Se você não pediu uma nova senha, ignore este e-mail: sua senha atual continua valendo.
+  </p>
+  <p style="font-size: 14px; color: #5b6573;">Efic Soluções</p>
+</div>
