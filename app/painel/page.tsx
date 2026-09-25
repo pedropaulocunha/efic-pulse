@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Marca } from "@/components/marca";
 import { AvisoErroConexao } from "@/components/ui";
 import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
@@ -49,8 +50,8 @@ export default async function Painel() {
     <div className="flex flex-1 flex-col">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-6">
-          <Link href="/painel" className="text-2xl font-semibold tracking-tight text-marca">
-            Pulse
+          <Link href="/painel" className="text-2xl">
+            <Marca />
           </Link>
           <form action="/auth/sair" method="post">
             <button type="submit" className="h-11 rounded-lg px-4 text-slate-600 hover:bg-slate-100">

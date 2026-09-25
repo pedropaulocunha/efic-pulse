@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Marca } from "@/components/marca";
 
 export const estiloCampo =
   "mt-1 block h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-base outline-none focus:border-marca focus:ring-2 focus:ring-marca/20";
@@ -18,8 +19,8 @@ export function TelaAcesso({
 }) {
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-12">
-      <Link href="/" className="text-3xl font-semibold tracking-tight text-marca">
-        Pulse
+      <Link href="/" className="text-3xl">
+        <Marca />
       </Link>
       <div className="mt-8 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <h1 className="text-xl font-semibold">{titulo}</h1>
