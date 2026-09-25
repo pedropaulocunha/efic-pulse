@@ -87,13 +87,13 @@ Visual limpo, pensado para funcionar em tablet desde já.
 
 ## Pronto quando
 
-- [ ] pulse.efic.com.br abre com certificado válido.
-- [ ] O Pedro, convidado pelo painel do Supabase, recebe o e-mail em português, define a senha e cai em `/painel`.
-- [ ] "Esqueci minha senha" funciona de ponta a ponta.
-- [ ] O Pedro é promovido a admin por SQL no painel, e a tela continua funcionando.
-- [ ] `supabase/tests/isolamento.sql` roda inteiro sem falha.
-- [ ] `x-vercel-id` confirma gru1.
-- [ ] Nenhuma chave secreta aparece no repositório: `git grep sb_secret_` não acha nada.
+- [x] pulse.efic.com.br abre com certificado válido.
+- [x] O Pedro, convidado pelo painel do Supabase, recebe o e-mail em português, define a senha e cai em `/painel`.
+- [x] "Esqueci minha senha" funciona de ponta a ponta.
+- [x] O Pedro é promovido a admin por SQL no painel, e a tela continua funcionando.
+- [x] `supabase/tests/isolamento.sql` roda inteiro sem falha.
+- [x] `x-vercel-id` confirma gru1.
+- [x] Nenhuma chave secreta aparece no repositório: `git grep sb_secret_` não acha nada.
 
 ## Fora desta fatia
 
