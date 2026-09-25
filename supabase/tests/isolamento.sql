@@ -2,7 +2,7 @@
 -- Rode inteiro no SQL Editor do Supabase. Tudo acontece dentro de uma
 -- transação desfeita no final: nada fica gravado no banco.
 --
--- Resultado esperado: "Success. No rows returned".
+-- Resultado esperado: uma linha "OK: todos os testes de isolamento passaram".
 -- Se alguma regra falhar, aparece um erro começando com "FALHOU:".
 
 begin;
@@ -266,5 +266,8 @@ begin
 end $$;
 
 reset role;
+
+-- Só chega aqui se nenhuma verificação acima falhou.
+select 'OK: todos os testes de isolamento passaram' as resultado;
 
 rollback;
