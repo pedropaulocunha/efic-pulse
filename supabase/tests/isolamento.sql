@@ -72,8 +72,7 @@ values
 -- ---------------------------------------------------------------
 
 set local role authenticated;
-select set_config('request.jwt.claims',
-  '{"sub":"00000000-0000-4000-a000-00000000000a","role":"authenticated"}', true);
+set local request.jwt.claims = '{"sub":"00000000-0000-4000-a000-00000000000a","role":"authenticated"}';
 
 do $$
 declare
@@ -190,8 +189,7 @@ end $$;
 -- ---------------------------------------------------------------
 
 set local role authenticated;
-select set_config('request.jwt.claims',
-  '{"sub":"00000000-0000-4000-a000-00000000000b","role":"authenticated"}', true);
+set local request.jwt.claims = '{"sub":"00000000-0000-4000-a000-00000000000b","role":"authenticated"}';
 
 do $$
 begin
@@ -210,8 +208,7 @@ reset role;
 -- ---------------------------------------------------------------
 
 set local role authenticated;
-select set_config('request.jwt.claims',
-  '{"sub":"00000000-0000-4000-a000-0000000000ad","role":"authenticated"}', true);
+set local request.jwt.claims = '{"sub":"00000000-0000-4000-a000-0000000000ad","role":"authenticated"}';
 
 do $$
 declare
@@ -247,7 +244,7 @@ reset role;
 -- ---------------------------------------------------------------
 
 set local role anon;
-select set_config('request.jwt.claims', '{"role":"anon"}', true);
+set local request.jwt.claims = '{"role":"anon"}';
 
 do $$
 begin
