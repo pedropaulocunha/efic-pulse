@@ -83,14 +83,18 @@ Antes de levar à primeira turma:
 
 ## Pronto quando
 
-- [ ] Com projeção no notebook, controle no tablet e três celulares, abrir uma atividade faz os três celulares trocarem de tela em até 2 segundos.
-- [ ] Mudar a resposta com a votação aberta substitui a anterior, e o contador não aumenta.
-- [ ] O resultado só aparece no telão quando o instrutor mostra, e nunca no celular.
-- [ ] A referência da escala só aparece quando revelada.
-- [ ] Um celular com a tela bloqueada durante a abertura mostra a atividade certa ao ser desbloqueado.
-- [ ] O link da projeção abre sem login e não comanda nada.
+- [x] Com projeção no notebook, controle no tablet e três celulares, abrir uma atividade faz os três celulares trocarem de tela em até 2 segundos.
+  - Testado em 26/09/2026 com um celular real (troca "quase instantânea") e controle e projeção no mesmo computador; no teste automático, a troca levou 0,4 s. Falta repetir com tablet e três celulares numa sala.
+- [x] Mudar a resposta com a votação aberta substitui a anterior, e o contador não aumenta.
+- [x] O resultado só aparece no telão quando o instrutor mostra, e nunca no celular.
+- [x] A referência da escala só aparece quando revelada.
+- [x] Um celular com a tela bloqueada durante a abertura mostra a atividade certa ao ser desbloqueado.
+- [x] O link da projeção abre sem login e não comanda nada.
 - [ ] 40 participantes simulados respondem sem erro, com as funções abaixo de 1 segundo na tabela da Vercel.
-- [ ] O teste de isolamento continua passando.
+  - Sem erro: sim (k6, 160 de 160 verificações). Tempo dentro do servidor (k6, p95): responder 0,34 s, estado 0,81 s, **entrar 1,31 s** com os 40 entrando no mesmo instante.
+  - Causa: o Supabase está no tamanho Micro, que atende em torno de 40 pedidos por segundo. O código já faz um pedido só por ação (migração 0013).
+  - **Pendente, decidido pelo Pedro:** passar o Supabase para Small antes da primeira turma real e repetir o k6.
+- [x] O teste de isolamento continua passando.
 
 ## Fora desta fatia
 
