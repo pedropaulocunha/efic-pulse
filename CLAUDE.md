@@ -40,10 +40,6 @@ Use estes termos em tudo o que o usuário lê (telas, mensagens, e-mails):
 
 Nos identificadores de código e nomes de tabela, use os mesmos termos em português, sem acento e em snake_case.
 
-## Marca
-
-O nome dos aplicativos aparece como assinatura em duas fontes, coladas e sem espaço ("EficPulse"): **Efic** em IBM Plex Sans negrito, cinza-escuro, e o nome do produto (**Pulse**) em IBM Plex Serif itálico, peso normal, na cor da marca (azul-petróleo `#0f5b78`). No app, use sempre o componente `components/marca.tsx`; nunca escreva o nome solto como logotipo. Em e-mails, use as mesmas fontes com reserva (Arial para a Sans, Georgia para a Serif).
-
 ## Especificação
 
 A especificação completa do produto está em `docs/especificacao.md` quando existir. Em caso de dúvida sobre comportamento, pergunte ao Pedro antes de decidir.

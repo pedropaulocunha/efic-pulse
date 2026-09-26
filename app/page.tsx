@@ -1,12 +1,9 @@
 import Link from "next/link";
-import { Marca } from "@/components/marca";
 
 export default function Inicio() {
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
-      <h1 className="text-5xl">
-        <Marca />
-      </h1>
+      <h1 className="text-5xl font-semibold tracking-tight text-marca">Pulse</h1>
       <p className="mt-3 text-lg text-slate-600">
         Treinamentos presenciais da Efic Soluções
       </p>
