@@ -141,6 +141,13 @@ begin
     raise exception 'FALHOU: instrutor A apagou evento do B';
   end if;
 
+  -- Não apaga nem o próprio evento (só admin apaga).
+  delete from public.eventos where id = '00000000-0000-4000-c000-00000000000a';
+  get diagnostics linhas = row_count;
+  if linhas <> 0 then
+    raise exception 'FALHOU: instrutor A apagou o próprio evento';
+  end if;
+
   -- Não inscreve pessoa em evento do B.
   begin
     insert into public.inscricoes (pessoa_id, evento_id, origem)
@@ -234,6 +241,13 @@ begin
   get diagnostics linhas = row_count;
   if linhas <> 1 then
     raise exception 'FALHOU: admin não alterou evento do instrutor B';
+  end if;
+
+  -- Admin apaga evento.
+  delete from public.eventos where id = '00000000-0000-4000-c000-00000000000b';
+  get diagnostics linhas = row_count;
+  if linhas <> 1 then
+    raise exception 'FALHOU: admin não apagou evento';
   end if;
 end $$;
 
