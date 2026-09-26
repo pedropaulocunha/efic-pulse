@@ -103,6 +103,29 @@ begin
   update public.eventos set estado = 'planejamento' where id = '00000000-0000-4000-c000-00000000000a';
 end $$;
 
+-- As funções do participante (0013) só podem ser executadas pelo servidor.
+do $$
+declare
+  funcao text;
+  papel text;
+begin
+  foreach funcao in array array[
+    'public.sala_entrar(text, text, text, text)',
+    'public.sala_estado(text)',
+    'public.sala_responder(text, uuid, jsonb)',
+    'public.normalizar_resposta(text, jsonb, jsonb)'
+  ] loop
+    foreach papel in array array['anon', 'authenticated'] loop
+      if has_function_privilege(papel, funcao, 'execute') then
+        raise exception 'FALHOU: % pode executar %', papel, funcao;
+      end if;
+    end loop;
+    if not has_function_privilege('service_role', funcao, 'execute') then
+      raise exception 'FALHOU: o servidor não pode executar %', funcao;
+    end if;
+  end loop;
+end $$;
+
 -- Uma sessão de participante e uma tentativa de entrada, para os testes de leitura.
 insert into public.sessoes_participante (inscricao_id, token_hash, expira_em)
 select id, repeat('a', 64), now() + interval '1 day'
@@ -376,6 +399,26 @@ begin
     raise exception 'FALHOU: instrutor A não revelou a referência';
   end if;
 
+  -- As funções do participante são só do servidor (chave secreta).
+  begin
+    perform public.sala_estado(repeat('a', 64));
+    raise exception 'FALHOU: instrutor executa sala_estado (dados de sessão de participante)';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.sala_entrar('ABCD', 'x@pulse.test', 'ip', repeat('b', 64));
+    raise exception 'FALHOU: instrutor executa sala_entrar';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.sala_responder(repeat('a', 64), '00000000-0000-4000-e000-0000000000a1', '{"opcao": 0}');
+    raise exception 'FALHOU: instrutor executa sala_responder';
+  exception when insufficient_privilege then
+    null;
+  end;
+
   -- Respostas: não lê a tabela; só o resultado agregado dos próprios eventos.
   begin
     perform 1 from public.respostas;
@@ -534,6 +577,18 @@ begin
   begin
     perform public.resultado_atividade('00000000-0000-4000-e000-0000000000a1');
     raise exception 'FALHOU: visitante sem login lê resultado agregado';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.sala_estado(repeat('a', 64));
+    raise exception 'FALHOU: visitante sem login executa sala_estado';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.sala_responder(repeat('a', 64), '00000000-0000-4000-e000-0000000000a1', '{"opcao": 0}');
+    raise exception 'FALHOU: visitante sem login executa sala_responder';
   exception when insufficient_privilege then
     null;
   end;

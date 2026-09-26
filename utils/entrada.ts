@@ -10,7 +10,9 @@ import {
 import {
   criarSessao,
   entradaBloqueada,
+  gravarCookieSessao,
   hashIpAtual,
+  novoToken,
   registrarTentativa,
 } from "@/utils/participante";
 import type { Cronometro } from "@/utils/cronometro";
@@ -18,6 +20,8 @@ import { criarClienteServico } from "@/utils/supabase/servico";
 
 // Entrada do participante: usada pelo formulário da página inicial
 // (app/acoes-entrada.ts) e pela API /api/sala/entrar (teste de carga).
+// A entrada normal é uma chamada só ao banco (sala_entrar). O cadastro
+// "Não estou na lista", raro, continua em etapas aqui.
 
 export type ResultadoEntrada =
   | { ok: true }
@@ -59,18 +63,7 @@ async function localizarEvento(
   return { mensagem: NAO_CONFEREM, contaComoErro: true };
 }
 
-// Inscrição da pessoa (pelo e-mail) no evento, numa consulta só.
-async function inscricaoPorEmail(db: SupabaseClient, eventoId: string, email: string) {
-  const { data, error } = await db
-    .from("inscricoes")
-    .select("id, pessoas!inner(email)")
-    .eq("evento_id", eventoId)
-    .eq("pessoas.email", email)
-    .maybeSingle();
-  if (error) throw error;
-  return (data?.id as string) ?? null;
-}
-
+// Usado no cadastro "Não estou na lista": precisa saber também se a pessoa já existe.
 async function buscarInscricao(db: SupabaseClient, eventoId: string, email: string) {
   const pessoa = await db.from("pessoas").select("id").eq("email", email).maybeSingle();
   if (pessoa.error) throw pessoa.error;
@@ -95,30 +88,29 @@ export async function tentarEntrada(
   const email = normalizarEmail(emailBruto);
 
   try {
-    const db = criarClienteServico();
-    const ipHash = await hashIpAtual();
+    // Tudo numa chamada ao banco (função sala_entrar, 0013): limite de tentativas,
+    // evento, inscrição, registro da tentativa e sessão.
+    const { token, tokenHash } = novoToken();
+    const { data, error } = await criarClienteServico().rpc("sala_entrar", {
+      codigo,
+      email,
+      ip_hash: await hashIpAtual(),
+      token_hash: tokenHash,
+    });
+    cronometro?.marcar("banco");
+    if (error) throw error;
 
-    const busca = await localizarEvento(db, ipHash, codigo);
-    cronometro?.marcar("evento");
-    if ("mensagem" in busca) {
-      if (busca.contaComoErro) await registrarTentativa(db, ipHash, false);
-      return { ok: false, erro: busca.mensagem, oferecerCadastro: busca.mensagem === NAO_CONFEREM };
+    switch (data.resultado) {
+      case "ok":
+        await gravarCookieSessao(token, new Date(data.expira_em));
+        return { ok: true };
+      case "bloqueado":
+        return { ok: false, erro: MUITAS_TENTATIVAS };
+      case "terminou":
+        return { ok: false, erro: TERMINOU };
+      default:
+        return { ok: false, erro: NAO_CONFEREM, oferecerCadastro: true };
     }
-
-    const inscricaoId = emailValido(email) ? await inscricaoPorEmail(db, busca.evento.id, email) : null;
-    cronometro?.marcar("inscricao");
-
-    if (!inscricaoId) {
-      await registrarTentativa(db, ipHash, false);
-      return { ok: false, erro: NAO_CONFEREM, oferecerCadastro: true };
-    }
-
-    await Promise.all([
-      registrarTentativa(db, ipHash, true),
-      criarSessao(db, inscricaoId, busca.evento.data_fim),
-    ]);
-    cronometro?.marcar("sessao");
-    return { ok: true };
   } catch (e) {
     console.error("tentarEntrada:", e);
     return { ok: false, erro: FALHA };

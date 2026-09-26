@@ -3,6 +3,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { EstadoSala } from "@/utils/sala";
 import { criarClienteServico } from "@/utils/supabase/servico";
 
 // Sessão do participante: própria do Pulse, sem Supabase Auth.
@@ -47,17 +48,13 @@ function calcularExpiracao(dataFim: string) {
   return fim > minimo ? fim : minimo;
 }
 
-export async function criarSessao(db: SupabaseClient, inscricaoId: string, dataFim: string) {
+// Token aleatório de 32 bytes: vai para o cookie; o banco recebe só o hash.
+export function novoToken() {
   const token = randomBytes(32).toString("base64url");
-  const expira = calcularExpiracao(dataFim);
+  return { token, tokenHash: hashToken(token) };
+}
 
-  const { error } = await db.from("sessoes_participante").insert({
-    inscricao_id: inscricaoId,
-    token_hash: hashToken(token),
-    expira_em: expira.toISOString(),
-  });
-  if (error) throw error;
-
+export async function gravarCookieSessao(token: string, expira: Date) {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_PARTICIPANTE, token, {
     httpOnly: true,
@@ -68,60 +65,52 @@ export async function criarSessao(db: SupabaseClient, inscricaoId: string, dataF
   });
 }
 
-// Uma consulta só: sessão, inscrição, pessoa e evento (com a atividade atual).
-export async function participanteAtual(): Promise<ResultadoParticipante> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_PARTICIPANTE)?.value;
-  if (!token) return { participante: null, erro: null };
+// Usada no cadastro "Não estou na lista". A entrada normal cria a sessão
+// dentro da função sala_entrar (0013), com a mesma regra de validade.
+export async function criarSessao(db: SupabaseClient, inscricaoId: string, dataFim: string) {
+  const { token, tokenHash } = novoToken();
+  const expira = calcularExpiracao(dataFim);
+
+  const { error } = await db.from("sessoes_participante").insert({
+    inscricao_id: inscricaoId,
+    token_hash: tokenHash,
+    expira_em: expira.toISOString(),
+  });
+  if (error) throw error;
+
+  await gravarCookieSessao(token, expira);
+}
+
+// Hash do token do cookie deste aparelho (null se não há sessão).
+export async function hashTokenAtual() {
+  const token = (await cookies()).get(COOKIE_PARTICIPANTE)?.value;
+  return token ? hashToken(token) : null;
+}
+
+export type ResultadoSessao =
+  | { participante: Participante; sala: EstadoSala; erro: null }
+  | { participante: null; sala: null; erro: string | null };
+
+// Uma chamada só ao banco (função sala_estado, 0013): quem é o participante,
+// o evento, a atividade atual e a resposta dele. Nunca inclui resultado.
+export async function lerSessao(): Promise<ResultadoSessao> {
+  const tokenHash = await hashTokenAtual();
+  if (!tokenHash) return { participante: null, sala: null, erro: null };
 
   try {
-    const db = criarClienteServico();
-    const { data, error } = await db
-      .from("sessoes_participante")
-      .select(
-        "id, expira_em, ultimo_acesso, inscricao:inscricoes(id, pessoa:pessoas(nome), evento:eventos(id, nome_turma, codigo_acesso, estado, atividade_atual_id, cooperativa:cooperativas(nome)))",
-      )
-      .eq("token_hash", hashToken(token))
-      .maybeSingle();
-
-    if (error) return { participante: null, erro: error.message };
-    if (!data) return { participante: null, erro: null };
-
-    if (new Date(data.expira_em) <= new Date()) {
-      await db.from("sessoes_participante").delete().eq("id", data.id);
-      return { participante: null, erro: null };
-    }
-
-    // Registra o acesso no máximo a cada 5 minutos, depois de responder (não atrasa a tela).
-    if (Date.now() - new Date(data.ultimo_acesso).getTime() > 5 * 60 * 1000) {
-      after(async () => {
-        await db
-          .from("sessoes_participante")
-          .update({ ultimo_acesso: new Date().toISOString() })
-          .eq("id", data.id);
-      });
-    }
-
-    // Sem os tipos gerados do banco, o formato das relações vem como desconhecido.
-    const inscricao = data.inscricao as unknown as {
-      id: string;
-      pessoa: { nome: string } | null;
-      evento: (Omit<Participante["evento"], "cooperativa"> & { cooperativa: { nome: string } | null }) | null;
-    } | null;
-    if (!inscricao?.evento) return { participante: null, erro: null };
-
-    return {
-      participante: {
-        sessaoId: data.id,
-        inscricaoId: inscricao.id,
-        nome: inscricao.pessoa?.nome ?? "",
-        evento: { ...inscricao.evento, cooperativa: inscricao.evento.cooperativa?.nome ?? null },
-      },
-      erro: null,
-    };
+    const { data, error } = await criarClienteServico().rpc("sala_estado", { token_hash: tokenHash });
+    if (error) return { participante: null, sala: null, erro: error.message };
+    if (!data) return { participante: null, sala: null, erro: null }; // sessão inexistente ou vencida
+    return { participante: data.participante as Participante, sala: data.sala as EstadoSala, erro: null };
   } catch (e) {
-    return { participante: null, erro: e instanceof Error ? e.message : "Falha de conexão" };
+    return { participante: null, sala: null, erro: e instanceof Error ? e.message : "Falha de conexão" };
   }
+}
+
+export async function participanteAtual(): Promise<ResultadoParticipante> {
+  const { participante, erro } = await lerSessao();
+  if (participante) return { participante, erro: null };
+  return { participante: null, erro };
 }
 
 export async function encerrarSessao() {

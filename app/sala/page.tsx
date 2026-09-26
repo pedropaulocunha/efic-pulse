@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { sairDoAparelho } from "@/app/acoes-entrada";
 import { Marca } from "@/components/marca";
-import { participanteAtual } from "@/utils/participante";
-import { estadoSala, type EstadoSala } from "@/utils/sala";
+import { lerSessao } from "@/utils/participante";
 import SalaAoVivo from "./sala-ao-vivo";
 
 function SemConexao() {
@@ -18,16 +17,10 @@ function SemConexao() {
 }
 
 export default async function Sala() {
-  const { participante, erro } = await participanteAtual();
+  // Uma chamada só: quem é o participante e o estado atual da sala.
+  const { participante, sala: inicial, erro } = await lerSessao();
   if (erro) return <SemConexao />;
   if (!participante) redirect("/");
-
-  let inicial: EstadoSala;
-  try {
-    inicial = await estadoSala(participante);
-  } catch {
-    return <SemConexao />;
-  }
 
   const { evento } = participante;
 
