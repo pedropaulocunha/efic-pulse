@@ -13,6 +13,7 @@ import {
   hashIpAtual,
   registrarTentativa,
 } from "@/utils/participante";
+import type { Cronometro } from "@/utils/cronometro";
 import { criarClienteServico } from "@/utils/supabase/servico";
 
 // Entrada do participante: usada pelo formulário da página inicial
@@ -85,7 +86,11 @@ async function buscarInscricao(db: SupabaseClient, eventoId: string, email: stri
   return { pessoaId: pessoa.data.id as string, inscricaoId: (inscricao.data?.id as string) ?? null };
 }
 
-export async function tentarEntrada(codigoBruto: unknown, emailBruto: unknown): Promise<ResultadoEntrada> {
+export async function tentarEntrada(
+  codigoBruto: unknown,
+  emailBruto: unknown,
+  cronometro?: Cronometro,
+): Promise<ResultadoEntrada> {
   const codigo = normalizarCodigo(codigoBruto);
   const email = normalizarEmail(emailBruto);
 
@@ -94,12 +99,14 @@ export async function tentarEntrada(codigoBruto: unknown, emailBruto: unknown): 
     const ipHash = await hashIpAtual();
 
     const busca = await localizarEvento(db, ipHash, codigo);
+    cronometro?.marcar("evento");
     if ("mensagem" in busca) {
       if (busca.contaComoErro) await registrarTentativa(db, ipHash, false);
       return { ok: false, erro: busca.mensagem, oferecerCadastro: busca.mensagem === NAO_CONFEREM };
     }
 
     const inscricaoId = emailValido(email) ? await inscricaoPorEmail(db, busca.evento.id, email) : null;
+    cronometro?.marcar("inscricao");
 
     if (!inscricaoId) {
       await registrarTentativa(db, ipHash, false);
@@ -110,6 +117,7 @@ export async function tentarEntrada(codigoBruto: unknown, emailBruto: unknown): 
       registrarTentativa(db, ipHash, true),
       criarSessao(db, inscricaoId, busca.evento.data_fim),
     ]);
+    cronometro?.marcar("sessao");
     return { ok: true };
   } catch (e) {
     console.error("tentarEntrada:", e);
