@@ -5,13 +5,49 @@ import { AvisoErroConexao, estiloBotaoCompacto, estiloBotaoSecundario } from "@/
 import { formatarPeriodo, rotuloEstado, uuidValido, type EstadoEvento } from "@/lib/formatos";
 import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
+import {
+  rotuloEstadoAtividade,
+  rotuloTipo,
+  type ConfigEscala,
+  type ConfigMultipla,
+  type ConfigNuvem,
+  type EstadoAtividade,
+  type TipoAtividade,
+} from "@/lib/atividades";
 import { confirmarInscricao } from "../acoes";
 import BotaoNovoCodigo from "./botao-novo-codigo";
+import { BotaoCopiarLink, BotoesAtividade } from "./botoes-evento";
+
+type Atividade = {
+  id: string;
+  tipo: TipoAtividade;
+  enunciado: string;
+  config: ConfigMultipla & ConfigEscala & ConfigNuvem;
+  estado: EstadoAtividade;
+};
+
+// Resumo da configuração, numa linha.
+function resumoConfig(a: Atividade) {
+  if (a.tipo === "multipla") return a.config.opcoes.join(" · ");
+  if (a.tipo === "escala") {
+    const u = a.config.unidade ? ` ${a.config.unidade}` : "";
+    const ref = typeof a.config.referencia === "number" ? ` · referência ${a.config.referencia}${u}` : "";
+    return `De ${a.config.min} a ${a.config.max}${u}, passo ${a.config.passo}${ref}`;
+  }
+  return a.config.max_palavras === 1 ? "1 palavra" : `Até ${a.config.max_palavras} palavras`;
+}
+
+const corEstadoAtividade: Record<EstadoAtividade, string> = {
+  fechada: "bg-slate-100 text-slate-600",
+  aberta: "bg-emerald-100 text-emerald-800",
+  encerrada: "bg-sky-100 text-sky-800",
+};
 
 type Evento = {
   id: string;
   codigo_interno: string;
   codigo_acesso: string;
+  projecao_token: string;
   nome_turma: string;
   tema: string | null;
   data_inicio: string;
@@ -39,11 +75,11 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
   if (!user) redirect("/login");
 
   const supabase = await criarClienteServidor();
-  const [evento, inscricoes] = await Promise.all([
+  const [evento, inscricoes, atividades] = await Promise.all([
     supabase
       .from("eventos")
       .select(
-        "id, codigo_interno, codigo_acesso, nome_turma, tema, data_inicio, data_fim, local, duracao_min, estado, cooperativas(nome, uf)",
+        "id, codigo_interno, codigo_acesso, projecao_token, nome_turma, tema, data_inicio, data_fim, local, duracao_min, estado, cooperativas(nome, uf)",
       )
       .eq("id", id)
       .maybeSingle<Evento>(),
@@ -52,8 +88,15 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
       .select("id, agencia, origem, confirmada, pessoas(nome, email, cargo)")
       .eq("evento_id", id)
       .returns<Inscrito[]>(),
+    supabase
+      .from("atividades")
+      .select("id, tipo, enunciado, config, estado")
+      .eq("evento_id", id)
+      .order("ordem")
+      .order("id")
+      .returns<Atividade[]>(),
   ]);
-  if (evento.error || inscricoes.error) return <AvisoErroConexao />;
+  if (evento.error || inscricoes.error || atividades.error) return <AvisoErroConexao />;
   if (!evento.data) notFound();
 
   const e = evento.data;
@@ -109,6 +152,68 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
             </Link>
             <BotaoNovoCodigo eventoId={e.id} />
           </div>
+        </section>
+
+        <section className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-6">
+          <p className="mr-auto text-sm font-medium text-slate-500">Sala ao vivo</p>
+          <Link href={`/painel/evento/${e.id}/controle`} className={estiloBotaoCompacto}>
+            Controle da sala
+          </Link>
+          <Link href={`/projecao/${e.projecao_token}`} target="_blank" className={estiloBotaoSecundario}>
+            Abrir projeção
+          </Link>
+          <BotaoCopiarLink caminho={`/projecao/${e.projecao_token}`} />
+        </section>
+
+        <section id="atividades" className="mt-10 scroll-mt-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h2 className="text-lg font-medium text-slate-700">Atividades ({atividades.data.length})</h2>
+            <Link href={`/painel/evento/${e.id}/atividade/nova`} className={estiloBotaoSecundario}>
+              Nova atividade
+            </Link>
+          </div>
+
+          {atividades.data.length === 0 ? (
+            <p className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-slate-500">
+              Nenhuma atividade ainda. Crie as perguntas que você vai abrir na sala.
+            </p>
+          ) : (
+            <ol className="mt-4 divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              {atividades.data.map((a, i) => (
+                <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">
+                      <span className="mr-2 text-slate-400">{i + 1}.</span>
+                      {a.enunciado}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {rotuloTipo[a.tipo]} · {resumoConfig(a)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-3 py-1 text-sm ${corEstadoAtividade[a.estado]}`}>
+                      {rotuloEstadoAtividade[a.estado]}
+                    </span>
+                    {a.estado === "fechada" && (
+                      <Link
+                        href={`/painel/evento/${e.id}/atividade/${a.id}`}
+                        className="inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-slate-600 hover:bg-slate-50"
+                      >
+                        Editar
+                      </Link>
+                    )}
+                    <BotoesAtividade
+                      eventoId={e.id}
+                      atividadeId={a.id}
+                      primeira={i === 0}
+                      ultima={i === atividades.data.length - 1}
+                      podeExcluir={a.estado !== "aberta"}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
         </section>
 
         <section className="mt-10">

@@ -110,6 +110,99 @@ select id, repeat('a', 64), now() + interval '1 day'
 
 insert into public.tentativas_entrada (ip_hash, sucesso) values ('teste', false);
 
+-- Atividades: duas no evento do A (múltipla e escala com referência), uma no do B (nuvem).
+insert into public.atividades (id, evento_id, ordem, tipo, enunciado, config)
+values
+  ('00000000-0000-4000-e000-0000000000a1', '00000000-0000-4000-c000-00000000000a', 1, 'multipla',
+   'Qual a maior causa de atraso?', '{"opcoes": ["Desemprego", "Doença", "Descontrole"]}'),
+  ('00000000-0000-4000-e000-0000000000a2', '00000000-0000-4000-c000-00000000000a', 2, 'escala',
+   'Quanto da carteira está em atraso?', '{"min": 0, "max": 100, "passo": 5, "unidade": "%", "referencia": 35}'),
+  ('00000000-0000-4000-e000-0000000000b1', '00000000-0000-4000-c000-00000000000b', 1, 'nuvem',
+   'Uma palavra sobre cobrança', '{"max_palavras": 3}');
+
+-- Daqui até o bloco do instrutor A, simula o servidor (chave secreta).
+set local request.jwt.claims = '{"role":"service_role"}';
+
+do $$
+declare
+  linhas integer;
+begin
+  -- Configuração inválida é recusada pelo banco.
+  begin
+    insert into public.atividades (evento_id, ordem, tipo, enunciado, config)
+    values ('00000000-0000-4000-c000-00000000000a', 9, 'multipla', 'Só uma opção', '{"opcoes": ["A"]}');
+    raise exception 'FALHOU: aceitou múltipla escolha com uma opção só';
+  exception when check_violation then
+    null;
+  end;
+  begin
+    insert into public.atividades (evento_id, ordem, tipo, enunciado, config)
+    values ('00000000-0000-4000-c000-00000000000a', 9, 'escala', 'Passo torto', '{"min": 0, "max": 10, "passo": 3}');
+    raise exception 'FALHOU: aceitou escala com passo que não divide o intervalo';
+  exception when check_violation then
+    null;
+  end;
+
+  -- Resposta para atividade que não está aberta é recusada.
+  begin
+    insert into public.respostas (atividade_id, inscricao_id, valor)
+    select '00000000-0000-4000-e000-0000000000a1', id, '{"opcao": 0}'
+      from public.inscricoes where evento_id = '00000000-0000-4000-c000-00000000000a';
+    raise exception 'FALHOU: aceitou resposta com a atividade fechada';
+  exception when check_violation then
+    null;
+  end;
+
+  -- Abrir: vira a atividade atual do evento.
+  perform public.comandar_atividade('00000000-0000-4000-e000-0000000000a1', 'abrir');
+  if (select atividade_atual_id from public.eventos where id = '00000000-0000-4000-c000-00000000000a')
+     is distinct from '00000000-0000-4000-e000-0000000000a1' then
+    raise exception 'FALHOU: abrir não definiu a atividade atual';
+  end if;
+
+  -- Resposta com a atividade aberta entra; responder de novo substitui.
+  insert into public.respostas (atividade_id, inscricao_id, valor)
+  select '00000000-0000-4000-e000-0000000000a1', id, '{"opcao": 0}'
+    from public.inscricoes where evento_id = '00000000-0000-4000-c000-00000000000a';
+  insert into public.respostas (atividade_id, inscricao_id, valor)
+  select '00000000-0000-4000-e000-0000000000a1', id, '{"opcao": 2}'
+    from public.inscricoes where evento_id = '00000000-0000-4000-c000-00000000000a'
+  on conflict (atividade_id, inscricao_id, rodada) do update set valor = excluded.valor;
+  if (select count(*) from public.respostas where atividade_id = '00000000-0000-4000-e000-0000000000a1') <> 1
+     or (select valor ->> 'opcao' from public.respostas where atividade_id = '00000000-0000-4000-e000-0000000000a1') <> '2' then
+    raise exception 'FALHOU: responder de novo não substituiu a resposta anterior';
+  end if;
+
+  -- Inscrito de outro evento não responde.
+  begin
+    insert into public.respostas (atividade_id, inscricao_id, valor)
+    select '00000000-0000-4000-e000-0000000000a1', id, '{"opcao": 1}'
+      from public.inscricoes where evento_id = '00000000-0000-4000-c000-00000000000b';
+    raise exception 'FALHOU: aceitou resposta de inscrito de outro evento';
+  exception when check_violation then
+    null;
+  end;
+
+  -- Só uma aberta por evento: abrir a segunda encerra a primeira.
+  perform public.comandar_atividade('00000000-0000-4000-e000-0000000000a2', 'abrir');
+  if (select estado from public.atividades where id = '00000000-0000-4000-e000-0000000000a1') <> 'encerrada'
+     or (select count(*) from public.atividades
+          where evento_id = '00000000-0000-4000-c000-00000000000a' and estado = 'aberta') <> 1 then
+    raise exception 'FALHOU: abrir outra atividade não encerrou a anterior';
+  end if;
+
+  -- Resultado agregado: o servidor lê; só números, sem quem respondeu.
+  if public.resultado_atividade('00000000-0000-4000-e000-0000000000a1') is null then
+    raise exception 'FALHOU: servidor não lê o resultado agregado';
+  end if;
+  if (public.resultado_atividade('00000000-0000-4000-e000-0000000000a1') -> 'contagem') <> '[0, 0, 1]'::jsonb then
+    raise exception 'FALHOU: resultado da múltipla escolha errado';
+  end if;
+  if public.resultado_atividade('00000000-0000-4000-e000-0000000000a1')::text ~* 'inscricao|pessoa|email' then
+    raise exception 'FALHOU: resultado agregado expõe quem respondeu';
+  end if;
+end $$;
+
 -- ---------------------------------------------------------------
 -- Instrutor A
 -- ---------------------------------------------------------------
@@ -242,6 +335,63 @@ begin
     raise exception 'FALHOU: instrutor A trocou o código de acesso do evento do B';
   end if;
 
+  -- Atividades: vê as do próprio evento, não as do B.
+  if (select count(*) from public.atividades where evento_id = '00000000-0000-4000-c000-00000000000a') <> 2 then
+    raise exception 'FALHOU: instrutor A não vê as atividades do próprio evento';
+  end if;
+  if (select count(*) from public.atividades where evento_id = '00000000-0000-4000-c000-00000000000b') <> 0 then
+    raise exception 'FALHOU: instrutor A vê atividade do evento do B';
+  end if;
+
+  -- Cria atividade no próprio evento, mas não no do B.
+  insert into public.atividades (evento_id, ordem, tipo, enunciado, config)
+  values ('00000000-0000-4000-c000-00000000000a', 3, 'nuvem', 'Nova do A', '{"max_palavras": 1}');
+  begin
+    insert into public.atividades (evento_id, ordem, tipo, enunciado, config)
+    values ('00000000-0000-4000-c000-00000000000b', 9, 'nuvem', 'Intrusa', '{"max_palavras": 1}');
+    raise exception 'FALHOU: instrutor A criou atividade no evento do B';
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  -- Não altera atividade do B.
+  update public.atividades set enunciado = 'Alterada por A' where id = '00000000-0000-4000-e000-0000000000b1';
+  get diagnostics linhas = row_count;
+  if linhas <> 0 then
+    raise exception 'FALHOU: instrutor A alterou atividade do B';
+  end if;
+
+  -- Não comanda atividade do B (para ele, ela não existe).
+  begin
+    perform public.comandar_atividade('00000000-0000-4000-e000-0000000000b1', 'abrir');
+    raise exception 'FALHOU: instrutor A abriu atividade do B';
+  exception when no_data_found then
+    null;
+  end;
+
+  -- Comanda as próprias.
+  perform public.comandar_atividade('00000000-0000-4000-e000-0000000000a2', 'encerrar');
+  perform public.comandar_atividade('00000000-0000-4000-e000-0000000000a2', 'revelar_referencia');
+  if not (select referencia_revelada from public.atividades where id = '00000000-0000-4000-e000-0000000000a2') then
+    raise exception 'FALHOU: instrutor A não revelou a referência';
+  end if;
+
+  -- Respostas: não lê a tabela; só o resultado agregado dos próprios eventos.
+  begin
+    perform 1 from public.respostas;
+    if found then
+      raise exception 'FALHOU: instrutor lê respostas individuais';
+    end if;
+  exception when insufficient_privilege then
+    null;
+  end;
+  if (public.resultado_atividade('00000000-0000-4000-e000-0000000000a1') ->> 'total') is distinct from '1' then
+    raise exception 'FALHOU: instrutor A não lê o resultado agregado do próprio evento';
+  end if;
+  if public.resultado_atividade('00000000-0000-4000-e000-0000000000b1') is not null then
+    raise exception 'FALHOU: instrutor A lê o resultado do evento do B';
+  end if;
+
   -- Não mexe em cooperativa (só admin altera).
   update public.cooperativas set nome = 'Alterada' where id = '00000000-0000-4000-b000-000000000001';
   get diagnostics linhas = row_count;
@@ -330,7 +480,15 @@ begin
     null;
   end;
 
-  -- Admin apaga evento.
+  -- Admin vê atividades e resultados de qualquer evento.
+  if (select count(*) from public.atividades where evento_id = '00000000-0000-4000-c000-00000000000b') <> 1 then
+    raise exception 'FALHOU: admin não vê atividade do evento do B';
+  end if;
+  if public.resultado_atividade('00000000-0000-4000-e000-0000000000b1') is null then
+    raise exception 'FALHOU: admin não lê o resultado do evento do B';
+  end if;
+
+  -- Admin apaga evento (e as atividades vão junto).
   delete from public.eventos where id = '00000000-0000-4000-c000-00000000000b';
   get diagnostics linhas = row_count;
   if linhas <> 1 then
@@ -358,6 +516,24 @@ begin
   begin
     perform 1 from public.perfis;
     raise exception 'FALHOU: visitante sem login lê perfis';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform 1 from public.atividades;
+    raise exception 'FALHOU: visitante sem login lê atividades';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform 1 from public.respostas;
+    raise exception 'FALHOU: visitante sem login lê respostas';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.resultado_atividade('00000000-0000-4000-e000-0000000000a1');
+    raise exception 'FALHOU: visitante sem login lê resultado agregado';
   exception when insufficient_privilege then
     null;
   end;
