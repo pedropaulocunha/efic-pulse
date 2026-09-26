@@ -50,15 +50,15 @@ Provisório, até o Pedro fechar: "Efic" em IBM Plex Sans SemiBold e "Pulse" em 
 
 ## Pronto quando
 
-- [ ] O Pedro cria um evento e vê o código de acesso gerado.
-- [ ] A importação de uma planilha de teste com 5 pessoas mostra a prévia correta e grava.
-- [ ] Pelo celular, com código e e-mail da lista, entra e vê a sala de espera.
-- [ ] Fechando e reabrindo o navegador do celular, entra direto, sem digitar.
-- [ ] Pelo QR code projetado, o código já chega preenchido.
-- [ ] E-mail fora da lista mostra a mensagem neutra; o cadastro "não estou na lista" aparece no painel marcado para confirmar.
-- [ ] Onze tentativas erradas seguidas bloqueiam a entrada por alguns minutos.
-- [ ] O teste de isolamento continua passando, com os casos novos.
-- [ ] `git grep sb_secret_` não acha nada.
+- [x] O Pedro cria um evento e vê o código de acesso gerado.
+- [x] A importação de uma planilha de teste com 5 pessoas mostra a prévia correta e grava.
+- [x] Pelo celular, com código e e-mail da lista, entra e vê a sala de espera.
+- [x] Fechando e reabrindo o navegador do celular, entra direto, sem digitar.
+- [x] Pelo QR code projetado, o código já chega preenchido.
+- [x] E-mail fora da lista mostra a mensagem neutra; o cadastro "não estou na lista" aparece no painel marcado para confirmar.
+- [x] Onze tentativas erradas seguidas bloqueiam a entrada por alguns minutos.
+- [x] O teste de isolamento continua passando, com os casos novos.
+- [x] `git grep sb_secret_` não acha nada.
 
 ## Fora desta fatia
 
