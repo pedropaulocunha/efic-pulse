@@ -67,6 +67,49 @@ values
   ('00000000-0000-4000-d000-000000000001', '00000000-0000-4000-c000-00000000000a', 'lista'),
   ('00000000-0000-4000-d000-000000000002', '00000000-0000-4000-c000-00000000000b', 'lista');
 
+-- Código de acesso e token da projeção gerados sozinhos, no formato certo.
+do $$
+declare
+  codigo_a text;
+begin
+  if exists (select 1 from public.eventos
+              where id in ('00000000-0000-4000-c000-00000000000a', '00000000-0000-4000-c000-00000000000b')
+                and (codigo_acesso !~ '^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$'
+                     or length(projecao_token) < 64)) then
+    raise exception 'FALHOU: código de acesso ou token da projeção fora do formato';
+  end if;
+
+  -- Letras que confundem (0, O, 1, I, L) são recusadas.
+  begin
+    update public.eventos set codigo_acesso = 'AB0O' where id = '00000000-0000-4000-c000-00000000000a';
+    raise exception 'FALHOU: código de acesso aceitou caractere proibido';
+  exception when check_violation then
+    null;
+  end;
+
+  -- Dois eventos não encerrados não podem ter o mesmo código.
+  select codigo_acesso into codigo_a from public.eventos where id = '00000000-0000-4000-c000-00000000000a';
+  begin
+    update public.eventos set codigo_acesso = codigo_a where id = '00000000-0000-4000-c000-00000000000b';
+    raise exception 'FALHOU: dois eventos abertos com o mesmo código de acesso';
+  exception when unique_violation then
+    null;
+  end;
+
+  -- Depois de encerrado, o código pode ser reaproveitado.
+  update public.eventos set estado = 'encerrado' where id = '00000000-0000-4000-c000-00000000000a';
+  update public.eventos set codigo_acesso = codigo_a where id = '00000000-0000-4000-c000-00000000000b';
+  update public.eventos set codigo_acesso = public.gerar_codigo_acesso() where id = '00000000-0000-4000-c000-00000000000b';
+  update public.eventos set estado = 'planejamento' where id = '00000000-0000-4000-c000-00000000000a';
+end $$;
+
+-- Uma sessão de participante e uma tentativa de entrada, para os testes de leitura.
+insert into public.sessoes_participante (inscricao_id, token_hash, expira_em)
+select id, repeat('a', 64), now() + interval '1 day'
+  from public.inscricoes where evento_id = '00000000-0000-4000-c000-00000000000a';
+
+insert into public.tentativas_entrada (ip_hash, sucesso) values ('teste', false);
+
 -- ---------------------------------------------------------------
 -- Instrutor A
 -- ---------------------------------------------------------------
@@ -173,6 +216,32 @@ begin
     null;
   end;
 
+  -- Não lê sessões de participante nem tentativas de entrada (só o servidor lê).
+  begin
+    perform 1 from public.sessoes_participante;
+    if found then
+      raise exception 'FALHOU: instrutor lê sessões de participante';
+    end if;
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform 1 from public.tentativas_entrada;
+    if found then
+      raise exception 'FALHOU: instrutor lê tentativas de entrada';
+    end if;
+  exception when insufficient_privilege then
+    null;
+  end;
+
+  -- Gera outro código de acesso para o próprio evento, mas não para o do B.
+  if (select public.regenerar_codigo_acesso('00000000-0000-4000-c000-00000000000a')) is null then
+    raise exception 'FALHOU: instrutor A não gerou outro código para o próprio evento';
+  end if;
+  if (select public.regenerar_codigo_acesso('00000000-0000-4000-c000-00000000000b')) is not null then
+    raise exception 'FALHOU: instrutor A trocou o código de acesso do evento do B';
+  end if;
+
   -- Não mexe em cooperativa (só admin altera).
   update public.cooperativas set nome = 'Alterada' where id = '00000000-0000-4000-b000-000000000001';
   get diagnostics linhas = row_count;
@@ -242,6 +311,24 @@ begin
   if linhas <> 1 then
     raise exception 'FALHOU: admin não alterou evento do instrutor B';
   end if;
+
+  -- Nem o admin lê sessões e tentativas pelo login: só o servidor.
+  begin
+    perform 1 from public.sessoes_participante;
+    if found then
+      raise exception 'FALHOU: admin lê sessões de participante pelo login';
+    end if;
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform 1 from public.tentativas_entrada;
+    if found then
+      raise exception 'FALHOU: admin lê tentativas de entrada pelo login';
+    end if;
+  exception when insufficient_privilege then
+    null;
+  end;
 
   -- Admin apaga evento.
   delete from public.eventos where id = '00000000-0000-4000-c000-00000000000b';
