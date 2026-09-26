@@ -40,6 +40,12 @@ Use estes termos em tudo o que o usuário lê (telas, mensagens, e-mails):
 
 Nos identificadores de código e nomes de tabela, use os mesmos termos em português, sem acento e em snake_case.
 
+## Marca e cores
+
+- **Logo:** "Efic" em IBM Plex Serif negrito, traço fino vertical, "Pulse" em IBM Plex Sans normal azul-acinzentado (`#5b82ad`). Sempre pelo componente `components/marca.tsx`.
+- **Telão:** cores dos resultados em `lib/paleta.ts`, seis cores em ordem fixa (a opção 1 é sempre petróleo, a 2 sempre coral…), validadas para daltonismo. Não reordene nem troque cor sem passar de novo no validador de paleta.
+- **Rodapé do telão:** endereço e código à esquerda, logo à direita, na mesma altura.
+
 ## Especificação
 
 A especificação completa do produto está em `docs/especificacao.md` quando existir. Em caso de dúvida sobre comportamento, pergunte ao Pedro antes de decidir.

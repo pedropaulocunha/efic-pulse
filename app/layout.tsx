@@ -12,18 +12,17 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Fontes do wordmark (components/marca.tsx).
+// Fontes da logo (components/marca.tsx): Efic em Serif negrito, Pulse em Sans normal.
 const plexSans = IBM_Plex_Sans({
   variable: "--font-plex-sans",
   subsets: ["latin"],
-  weight: ["600"],
+  weight: ["400"],
 });
 
 const plexSerif = IBM_Plex_Serif({
   variable: "--font-plex-serif",
   subsets: ["latin"],
-  weight: ["400"],
-  style: ["italic"],
+  weight: ["700"],
 });
 
 export const metadata: Metadata = {

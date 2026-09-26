@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Marca } from "@/components/marca";
 import { BarrasMultipla, HistogramaEscala, NuvemPalavras } from "@/components/resultado-telao";
 import { useEstadoAoVivo } from "@/components/use-estado-ao-vivo";
@@ -16,18 +17,28 @@ export default function Telao({
   inicial: EstadoProjecao;
   endereco: string;
 }) {
+  const [removida, setRemovida] = useState(false);
   const { dados, semConexao } = useEstadoAoVivo<EstadoProjecao>(
     `/api/projecao/${token}`,
     inicial.evento.id,
     inicial,
-    { ouvirRespostas: true },
+    { ouvirRespostas: true, aoNaoEncontrar: () => setRemovida(true) },
   );
   const { evento, atividade } = dados;
+
+  if (removida) {
+    return (
+      <main className="flex h-screen w-screen flex-col items-center justify-center gap-[4vh] bg-white text-center">
+        <p className="text-[2.6vw] text-slate-600">Esta projeção não existe mais.</p>
+        <Marca className="text-[2.4vw]" />
+      </main>
+    );
+  }
 
   return (
     <main className="relative flex h-screen w-screen flex-col overflow-hidden bg-white px-[5vw] py-[5vh] text-slate-900">
       {atividade ? (
-        <div className="flex min-h-0 flex-1 flex-col pb-[14vh]">
+        <div className="flex min-h-0 flex-1 flex-col pb-[10vh]">
           <h1 className="text-[3.6vw] font-semibold leading-tight">{atividade.enunciado}</h1>
 
           {/* my-auto centraliza quando cabe e nunca sobe por cima da pergunta quando não cabe. */}
@@ -68,17 +79,24 @@ export default function Telao({
         </div>
       )}
 
-      {/* Canto fixo: wordmark, endereço e código de acesso. */}
-      <div className="absolute bottom-[4vh] right-[4vw] flex items-end gap-[2.5vw]">
-        <div className="text-right">
-          <Marca className="text-[2vw]" />
-          <p className="text-[1.4vw] text-slate-500">{endereco}</p>
-        </div>
-        <p className="font-mono text-[4.5vw] font-semibold leading-none tracking-[0.1em]">{evento.codigoAcesso}</p>
+      {/* Rodapé fixo: endereço e código à esquerda, logo à direita, na mesma altura.
+          Na tela de espera o código já está grande no centro, então não se repete. */}
+      <div className="absolute inset-x-[4vw] bottom-[4vh] flex items-center justify-between">
+        {atividade ? (
+          <p className="flex items-center gap-[1.2vw] leading-none">
+            <span className="text-[1.4vw] text-slate-500">{endereco}</span>
+            <span className="font-mono text-[2.4vw] font-semibold tracking-[0.12em] text-slate-900">
+              {evento.codigoAcesso}
+            </span>
+          </p>
+        ) : (
+          <span />
+        )}
+        <Marca className="text-[2.4vw]" />
       </div>
 
       {semConexao && (
-        <p className="absolute left-[4vw] bottom-[4vh] text-[1.2vw] text-amber-700">Reconectando…</p>
+        <p className="absolute right-[4vw] top-[3vh] text-[1.2vw] text-amber-700">Reconectando…</p>
       )}
     </main>
   );

@@ -17,6 +17,8 @@ type Opcoes = {
   ouvirRespostas?: boolean;
   // Chamado quando o servidor responde 401 (sessão acabou).
   aoPerderSessao?: () => void;
+  // Chamado quando o servidor responde 404 (ex.: evento apagado com o telão aberto).
+  aoNaoEncontrar?: () => void;
 };
 
 export function useEstadoAoVivo<T>(url: string, eventoId: string, inicial: T, opcoes: Opcoes = {}) {
@@ -49,6 +51,10 @@ export function useEstadoAoVivo<T>(url: string, eventoId: string, inicial: T, op
         if (!ativo) return;
         if (resposta.status === 401) {
           opcoesRef.current.aoPerderSessao?.();
+          return;
+        }
+        if (resposta.status === 404) {
+          opcoesRef.current.aoNaoEncontrar?.();
           return;
         }
         if (!resposta.ok) throw new Error(String(resposta.status));

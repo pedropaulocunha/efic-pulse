@@ -1,6 +1,7 @@
 // Gráficos do telão: barras (múltipla escolha), histograma (escala) e nuvem de palavras.
 // Tela para projetar, sem interação: os números importantes vão escritos ao lado do gráfico.
-// Uma série por gráfico, na cor da marca; a referência da escala tem cor e rótulo próprios.
+// Cores em lib/paleta.ts: cada opção com sua cor fixa; a escala (uma medida só) em
+// petróleo, com a referência em coral e rótulo próprio.
 
 import {
   formatarNumero,
@@ -8,10 +9,14 @@ import {
   type ConfigEscala,
   type ConfigMultipla,
 } from "@/lib/atividades";
+import {
+  COR_ESCALA,
+  COR_REFERENCIA,
+  COR_REFERENCIA_TEXTO,
+  CORES_OPCOES,
+  corDaPalavra,
+} from "@/lib/paleta";
 import type { ResultadoAgregado } from "@/utils/projecao";
-
-const COR_MARCA = "#0f5b78";
-const COR_REFERENCIA = "#b45309";
 
 function percentual(n: number, total: number) {
   return total === 0 ? 0 : Math.round((n / total) * 100);
@@ -39,7 +44,7 @@ export function BarrasMultipla({
             <div className="h-[5.5vh] rounded-r-[4px] bg-slate-100">
               <div
                 className="h-full rounded-r-[4px] transition-[width] duration-700 ease-out"
-                style={{ width: `${(n / maior) * 100}%`, backgroundColor: COR_MARCA }}
+                style={{ width: `${(n / maior) * 100}%`, backgroundColor: CORES_OPCOES[i % CORES_OPCOES.length] }}
               />
             </div>
             <span className="w-[12vw] text-right text-[2.6vw] tabular-nums text-slate-900">
@@ -110,7 +115,7 @@ export function HistogramaEscala({
           </span>
         )}
         {referencia !== null && (
-          <span style={{ color: COR_REFERENCIA }}>
+          <span style={{ color: COR_REFERENCIA_TEXTO }}>
             Referência <strong className="tabular-nums">{formatarNumero(referencia, config.unidade)}</strong>
           </span>
         )}
@@ -134,7 +139,7 @@ export function HistogramaEscala({
               y={A - h}
               height={h}
               rx={4}
-              fill={COR_MARCA}
+              fill={COR_ESCALA}
             />
           );
         })}
@@ -161,7 +166,7 @@ export function HistogramaEscala({
       <div className="mt-[1.5vh] flex gap-[3vw] text-[1.5vw] text-slate-500">
         <span>— linha cheia: média</span>
         <span>- - tracejada: mediana</span>
-        {referencia !== null && <span style={{ color: COR_REFERENCIA }}>— laranja: referência</span>}
+        {referencia !== null && <span style={{ color: COR_REFERENCIA_TEXTO }}>— coral: referência</span>}
       </div>
     </div>
   );
@@ -192,7 +197,7 @@ export function NuvemPalavras({ resultado }: { resultado: Extract<ResultadoAgreg
             style={{
               fontSize: `${1.6 + peso * 5.4}vw`,
               fontWeight: peso > 0.6 ? 700 : peso > 0.3 ? 600 : 500,
-              color: peso > 0.45 ? COR_MARCA : "#475569",
+              color: corDaPalavra(p.palavra),
             }}
           >
             {p.palavra}
