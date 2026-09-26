@@ -10,6 +10,20 @@
 import http from "k6/http";
 import { check, fail, sleep } from "k6";
 import exec from "k6/execution";
+import { Trend } from "k6/metrics";
+
+// Tempo gasto DENTRO do servidor (cabeçalho Server-Timing), sem a internet de quem mede.
+const servidor = {
+  entrar: new Trend("servidor_entrar", true),
+  estado: new Trend("servidor_estado", true),
+  responder: new Trend("servidor_responder", true),
+};
+
+function registrarServidor(nome, resposta) {
+  const st = resposta.headers["Server-Timing"] || "";
+  const total = /total;dur=(\d+)/.exec(st);
+  if (total) servidor[nome].add(Number(total[1]));
+}
 
 const BASE = __ENV.BASE || "https://pulse.efic.com.br";
 const CODIGO = (__ENV.CODIGO || "").toUpperCase();
@@ -31,6 +45,9 @@ export const options = {
     "http_req_duration{nome:entrar}": ["p(95)<1500"],
     "http_req_duration{nome:estado}": ["p(95)<1000"],
     "http_req_duration{nome:responder}": ["p(95)<1000"],
+    servidor_entrar: ["p(95)<1000"],
+    servidor_estado: ["p(95)<1000"],
+    servidor_responder: ["p(95)<1000"],
   },
 };
 
@@ -73,6 +90,7 @@ export default function participante() {
 
   // 1. Entrar (o k6 guarda o cookie da sessão de cada participante).
   let r = http.post(`${BASE}/api/sala/entrar`, JSON.stringify({ codigo: CODIGO, email: meuEmail }), json("entrar"));
+  registrarServidor("entrar", r);
   if (!check(r, { "entrou na sala": (x) => x.status === 200 })) {
     console.error(`${meuEmail} não entrou: ${r.status} ${r.body}`);
     return;
@@ -83,6 +101,7 @@ export default function participante() {
   let atividade = null;
   while (Date.now() < limite) {
     r = http.get(`${BASE}/api/sala/estado`, { tags: { nome: "estado" } });
+    registrarServidor("estado", r);
     check(r, { "consultou a sala": (x) => x.status === 200 });
     const corpo = r.status === 200 ? r.json() : null;
     if (corpo && corpo.atividade && corpo.atividade.estado === "aberta") {
@@ -100,6 +119,7 @@ export default function participante() {
     JSON.stringify({ atividade_id: atividade.id, valor: valorAleatorio(atividade) }),
     json("responder"),
   );
+  registrarServidor("responder", r);
   if (!check(r, { "resposta aceita": (x) => x.status === 200 })) {
     console.error(`${meuEmail} não respondeu: ${r.status} ${r.body}`);
   }
