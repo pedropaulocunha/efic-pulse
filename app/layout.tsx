@@ -16,13 +16,14 @@ const geistMono = Geist_Mono({
 const plexSans = IBM_Plex_Sans({
   variable: "--font-plex-sans",
   subsets: ["latin"],
-  weight: ["600"],
+  weight: ["700"],
 });
 
 const plexSerif = IBM_Plex_Serif({
   variable: "--font-plex-serif",
   subsets: ["latin"],
-  weight: ["500"],
+  weight: ["400"],
+  style: ["italic"],
 });
 
 export const metadata: Metadata = {
