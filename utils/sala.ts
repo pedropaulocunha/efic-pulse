@@ -23,40 +23,32 @@ export type EstadoSala = {
   resposta: ValorResposta | null; // a resposta que ele já enviou, se houver
 };
 
+// O participante já vem com o estado do evento e a atividade atual (participanteAtual),
+// então aqui bastam duas consultas, feitas juntas: a atividade e a resposta dele.
 export async function estadoSala(participante: Participante): Promise<EstadoSala> {
   const db = criarClienteServico();
+  const atualId = participante.evento.atividade_atual_id;
 
-  const evento = await db
-    .from("eventos")
-    .select("estado, atividade_atual_id")
-    .eq("id", participante.evento.id)
-    .single();
-  if (evento.error) throw evento.error;
+  const base = { eventoEncerrado: participante.evento.estado === "encerrado", atividade: null, resposta: null };
+  if (!atualId) return base;
 
-  const base = { eventoEncerrado: evento.data.estado === "encerrado", atividade: null, resposta: null };
-  if (!evento.data.atividade_atual_id) return base;
-
-  const atividade = await db
-    .from("atividades")
-    .select("id, tipo, enunciado, config, estado")
-    .eq("id", evento.data.atividade_atual_id)
-    .single();
-  if (atividade.error) throw atividade.error;
-  const a = atividade.data;
-  if (a.estado === "fechada") return base;
-
-  let resposta: ValorResposta | null = null;
-  if (a.estado === "aberta") {
-    const r = await db
+  const [atividade, minhaResposta] = await Promise.all([
+    db.from("atividades").select("id, tipo, enunciado, config, estado").eq("id", atualId).single(),
+    db
       .from("respostas")
       .select("valor")
-      .eq("atividade_id", a.id)
+      .eq("atividade_id", atualId)
       .eq("inscricao_id", participante.inscricaoId)
       .eq("rodada", 1)
-      .maybeSingle();
-    if (r.error) throw r.error;
-    resposta = (r.data?.valor as ValorResposta) ?? null;
-  }
+      .maybeSingle(),
+  ]);
+  if (atividade.error) throw atividade.error;
+  if (minhaResposta.error) throw minhaResposta.error;
+
+  const a = atividade.data;
+  if (a.estado === "fechada") return base;
+  // A resposta enviada só importa com a votação aberta (para "Mudar minha resposta").
+  const resposta = a.estado === "aberta" ? ((minhaResposta.data?.valor as ValorResposta) ?? null) : null;
 
   return {
     eventoEncerrado: base.eventoEncerrado,

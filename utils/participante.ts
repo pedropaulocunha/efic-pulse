@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
+import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { criarClienteServico } from "@/utils/supabase/servico";
 
@@ -22,6 +23,7 @@ export type Participante = {
     codigo_acesso: string;
     estado: "planejamento" | "ao_vivo" | "encerrado";
     cooperativa: string | null;
+    atividade_atual_id: string | null;
   };
 };
 
@@ -66,6 +68,7 @@ export async function criarSessao(db: SupabaseClient, inscricaoId: string, dataF
   });
 }
 
+// Uma consulta só: sessão, inscrição, pessoa e evento (com a atividade atual).
 export async function participanteAtual(): Promise<ResultadoParticipante> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_PARTICIPANTE)?.value;
@@ -76,7 +79,7 @@ export async function participanteAtual(): Promise<ResultadoParticipante> {
     const { data, error } = await db
       .from("sessoes_participante")
       .select(
-        "id, expira_em, ultimo_acesso, inscricao:inscricoes(id, pessoa:pessoas(nome), evento:eventos(id, nome_turma, codigo_acesso, estado, cooperativa:cooperativas(nome)))",
+        "id, expira_em, ultimo_acesso, inscricao:inscricoes(id, pessoa:pessoas(nome), evento:eventos(id, nome_turma, codigo_acesso, estado, atividade_atual_id, cooperativa:cooperativas(nome)))",
       )
       .eq("token_hash", hashToken(token))
       .maybeSingle();
@@ -89,12 +92,14 @@ export async function participanteAtual(): Promise<ResultadoParticipante> {
       return { participante: null, erro: null };
     }
 
-    // Registra o acesso, no máximo a cada 5 minutos, para não gravar a cada tela.
+    // Registra o acesso no máximo a cada 5 minutos, depois de responder (não atrasa a tela).
     if (Date.now() - new Date(data.ultimo_acesso).getTime() > 5 * 60 * 1000) {
-      await db
-        .from("sessoes_participante")
-        .update({ ultimo_acesso: new Date().toISOString() })
-        .eq("id", data.id);
+      after(async () => {
+        await db
+          .from("sessoes_participante")
+          .update({ ultimo_acesso: new Date().toISOString() })
+          .eq("id", data.id);
+      });
     }
 
     // Sem os tipos gerados do banco, o formato das relações vem como desconhecido.
@@ -145,37 +150,34 @@ export async function hashIpAtual() {
 // Bloqueia depois de 10 tentativas erradas SEGUIDAS em 15 minutos pelo mesmo IP.
 // Uma entrada certa zera a contagem: numa sala, dezenas de celulares saem pelo
 // mesmo IP do Wi-Fi, e os erros de digitação de uns não podem travar a turma toda.
+// Uma consulta só: as últimas tentativas, da mais nova para a mais velha.
 export async function entradaBloqueada(db: SupabaseClient, ipHash: string) {
-  let desde = new Date(Date.now() - JANELA_MS).toISOString();
-
-  const ultimoSucesso = await db
+  const { data, error } = await db
     .from("tentativas_entrada")
-    .select("criado_em")
+    .select("sucesso")
     .eq("ip_hash", ipHash)
-    .eq("sucesso", true)
-    .gte("criado_em", desde)
+    .gte("criado_em", new Date(Date.now() - JANELA_MS).toISOString())
     .order("criado_em", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (ultimoSucesso.error) throw ultimoSucesso.error;
-  if (ultimoSucesso.data) desde = ultimoSucesso.data.criado_em;
+    .limit(LIMITE_FALHAS);
+  if (error) throw error;
 
-  const falhas = await db
-    .from("tentativas_entrada")
-    .select("id", { count: "exact", head: true })
-    .eq("ip_hash", ipHash)
-    .eq("sucesso", false)
-    .gt("criado_em", desde);
-  if (falhas.error) throw falhas.error;
-
-  return (falhas.count ?? 0) >= LIMITE_FALHAS;
+  const ultimoSucesso = data.findIndex((t) => t.sucesso);
+  const falhasSeguidas = ultimoSucesso === -1 ? data.length : ultimoSucesso;
+  return falhasSeguidas >= LIMITE_FALHAS;
 }
 
 export async function registrarTentativa(db: SupabaseClient, ipHash: string, sucesso: boolean) {
-  await db.from("tentativas_entrada").insert({ ip_hash: ipHash, sucesso });
-  // Faxina: tentativas com mais de um dia não servem para nada.
-  await db
-    .from("tentativas_entrada")
-    .delete()
-    .lt("criado_em", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  const { error } = await db.from("tentativas_entrada").insert({ ip_hash: ipHash, sucesso });
+  if (error) throw error;
+
+  // Faxina de vez em quando (1 em cada 20 tentativas), fora do caminho da resposta:
+  // tentativas com mais de um dia não servem para nada.
+  if (Math.random() < 0.05) {
+    after(async () => {
+      await db
+        .from("tentativas_entrada")
+        .delete()
+        .lt("criado_em", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+    });
+  }
 }

@@ -34,38 +34,40 @@ const FALHA = "Não foi possível entrar agora. Tente de novo em instantes.";
 
 type EventoAberto = { id: string; data_fim: string };
 
-// Confere o limite de tentativas e procura o evento pelo código.
+// Confere o limite de tentativas e procura o evento pelo código, as duas consultas juntas.
 async function localizarEvento(
   db: SupabaseClient,
   ipHash: string,
   codigo: string,
 ): Promise<{ evento: EventoAberto } | { mensagem: string; contaComoErro: boolean }> {
-  if (await entradaBloqueada(db, ipHash)) {
-    return { mensagem: MUITAS_TENTATIVAS, contaComoErro: false };
-  }
-  if (!CODIGO_ACESSO_REGEX.test(codigo)) {
-    return { mensagem: NAO_CONFEREM, contaComoErro: true };
-  }
+  const codigoValido = CODIGO_ACESSO_REGEX.test(codigo);
+  const [bloqueada, eventos] = await Promise.all([
+    entradaBloqueada(db, ipHash),
+    // Todos os eventos com esse código: no máximo um aberto, e talvez encerrados antigos.
+    codigoValido
+      ? db.from("eventos").select("id, data_fim, estado").eq("codigo_acesso", codigo)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
 
-  const aberto = await db
-    .from("eventos")
-    .select("id, data_fim")
-    .eq("codigo_acesso", codigo)
-    .neq("estado", "encerrado")
-    .maybeSingle();
-  if (aberto.error) throw aberto.error;
-  if (aberto.data) return { evento: aberto.data };
+  if (bloqueada) return { mensagem: MUITAS_TENTATIVAS, contaComoErro: false };
+  if (eventos.error) throw eventos.error;
 
-  const encerrado = await db
-    .from("eventos")
-    .select("id")
-    .eq("codigo_acesso", codigo)
-    .eq("estado", "encerrado")
-    .limit(1);
-  if (encerrado.error) throw encerrado.error;
-  if (encerrado.data.length > 0) return { mensagem: TERMINOU, contaComoErro: false };
-
+  const aberto = eventos.data?.find((e) => e.estado !== "encerrado");
+  if (aberto) return { evento: aberto };
+  if (eventos.data?.length) return { mensagem: TERMINOU, contaComoErro: false };
   return { mensagem: NAO_CONFEREM, contaComoErro: true };
+}
+
+// Inscrição da pessoa (pelo e-mail) no evento, numa consulta só.
+async function inscricaoPorEmail(db: SupabaseClient, eventoId: string, email: string) {
+  const { data, error } = await db
+    .from("inscricoes")
+    .select("id, pessoas!inner(email)")
+    .eq("evento_id", eventoId)
+    .eq("pessoas.email", email)
+    .maybeSingle();
+  if (error) throw error;
+  return (data?.id as string) ?? null;
 }
 
 async function buscarInscricao(db: SupabaseClient, eventoId: string, email: string) {
@@ -97,17 +99,17 @@ export async function tentarEntrada(codigoBruto: unknown, emailBruto: unknown): 
       return { ok: false, erro: busca.mensagem, oferecerCadastro: busca.mensagem === NAO_CONFEREM };
     }
 
-    const { inscricaoId } = emailValido(email)
-      ? await buscarInscricao(db, busca.evento.id, email)
-      : { inscricaoId: null };
+    const inscricaoId = emailValido(email) ? await inscricaoPorEmail(db, busca.evento.id, email) : null;
 
     if (!inscricaoId) {
       await registrarTentativa(db, ipHash, false);
       return { ok: false, erro: NAO_CONFEREM, oferecerCadastro: true };
     }
 
-    await registrarTentativa(db, ipHash, true);
-    await criarSessao(db, inscricaoId, busca.evento.data_fim);
+    await Promise.all([
+      registrarTentativa(db, ipHash, true),
+      criarSessao(db, inscricaoId, busca.evento.data_fim),
+    ]);
     return { ok: true };
   } catch (e) {
     console.error("tentarEntrada:", e);
@@ -169,8 +171,10 @@ export async function tentarCadastroNaSala(dados: {
     }
     if (!inscricaoId) throw new Error("Inscrição não encontrada depois do cadastro");
 
-    await registrarTentativa(db, ipHash, true);
-    await criarSessao(db, inscricaoId, busca.evento.data_fim);
+    await Promise.all([
+      registrarTentativa(db, ipHash, true),
+      criarSessao(db, inscricaoId, busca.evento.data_fim),
+    ]);
     return { ok: true };
   } catch (e) {
     console.error("tentarCadastroNaSala:", e);
