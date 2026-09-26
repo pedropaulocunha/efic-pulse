@@ -28,10 +28,17 @@ export const COR_ESCALA = CORES_OPCOES[0];
 export const COR_REFERENCIA = CORES_OPCOES[1];
 export const COR_REFERENCIA_TEXTO = CORES_TEXTO[1];
 
-// Cor fixa de cada palavra da nuvem, calculada a partir da própria palavra:
-// "prazo" tem sempre a mesma cor, mesmo quando outras palavras passam à frente.
+// Cor de cada palavra da nuvem: cada palavra nova pega a PRÓXIMA cor da fila
+// (as seis primeiras nunca repetem) e fica com ela enquanto o telão estiver aberto,
+// mesmo quando outras palavras passam à frente. Chame na ordem de frequência,
+// para as mais citadas pegarem as primeiras cores.
+const coresDasPalavras = new Map<string, string>();
+
 export function corDaPalavra(palavra: string) {
-  let h = 0;
-  for (const c of palavra) h = (h * 31 + c.codePointAt(0)!) >>> 0;
-  return CORES_TEXTO[h % CORES_TEXTO.length];
+  let cor = coresDasPalavras.get(palavra);
+  if (!cor) {
+    cor = CORES_TEXTO[coresDasPalavras.size % CORES_TEXTO.length];
+    coresDasPalavras.set(palavra, cor);
+  }
+  return cor;
 }

@@ -181,6 +181,9 @@ export function NuvemPalavras({ resultado }: { resultado: Extract<ResultadoAgreg
   if (palavras.length === 0) return null;
   const maior = palavras[0].n;
 
+  // Cores distribuídas pela ordem de frequência (antes de embaralhar a posição).
+  const cores = new Map(palavras.map((p) => [p.palavra, corDaPalavra(p.palavra)]));
+
   // Maiores no meio: alterna as palavras à direita e à esquerda da mais citada.
   const arrumadas: typeof palavras = [];
   palavras.forEach((p, i) => (i % 2 === 0 ? arrumadas.push(p) : arrumadas.unshift(p)));
@@ -197,7 +200,7 @@ export function NuvemPalavras({ resultado }: { resultado: Extract<ResultadoAgreg
             style={{
               fontSize: `${1.6 + peso * 5.4}vw`,
               fontWeight: peso > 0.6 ? 700 : peso > 0.3 ? 600 : 500,
-              color: corDaPalavra(p.palavra),
+              color: cores.get(p.palavra),
             }}
           >
             {p.palavra}
