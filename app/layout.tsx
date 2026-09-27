@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 // Fontes da logo (components/marca.tsx): Efic em Serif negrito, Pulse em Sans normal.
+// A Serif 600 é a da pergunta no telão.
 const plexSans = IBM_Plex_Sans({
   variable: "--font-plex-sans",
   subsets: ["latin"],
@@ -22,7 +23,7 @@ const plexSans = IBM_Plex_Sans({
 const plexSerif = IBM_Plex_Serif({
   variable: "--font-plex-serif",
   subsets: ["latin"],
-  weight: ["700"],
+  weight: ["600", "700"],
 });
 
 export const metadata: Metadata = {

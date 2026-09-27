@@ -101,8 +101,12 @@ export default function Telao({
     <main className="relative flex h-screen w-screen flex-col overflow-hidden bg-white px-[5vw] py-[5vh] text-slate-900">
       {atividade ? (
         <div className="flex min-h-0 flex-1 flex-col pb-[10vh]">
-          {/* O menor entre largura e altura: não cresce demais em tela larga e baixa. */}
-          <h1 className="text-[min(2.6vw,4.6vh)] font-semibold leading-tight">{atividade.enunciado}</h1>
+          {/* Pergunta na serifa da logo, em petróleo escuro, com linha embaixo: separa
+              a pergunta das respostas. Tamanho pelo menor entre largura e altura da tela. */}
+          <h1 className="font-marca-serif text-[min(3vw,5.2vh)] font-semibold leading-tight text-[#0f4c64]">
+            {atividade.enunciado}
+          </h1>
+          <div className="mt-[2vh] h-[2px] w-full bg-slate-300" />
 
           {/* my-auto centraliza quando cabe e nunca sobe por cima da pergunta quando não cabe. */}
           <div className="mt-[4vh] flex min-h-0 flex-1 flex-col">
@@ -116,7 +120,7 @@ export default function Telao({
                 <Resultado atividade={atividade} />
               </div>
             ) : (
-              <p className="my-auto w-full text-center text-[3vw] text-slate-500">
+              <p className="my-auto w-full text-center text-[2.4vw] text-slate-500">
                 {atividade.estado === "aberta"
                   ? atividade.rodada > 1
                     ? `Rodada ${atividade.rodada}: responda de novo pelo celular.`
