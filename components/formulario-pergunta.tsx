@@ -21,9 +21,13 @@ import {
   type TipoAtividade,
 } from "@/lib/atividades";
 import type { Bloco } from "@/lib/blocos";
-import { salvarAtividade, type EstadoFormularioAtividade } from "../../acoes-atividades";
 
-const inicial: EstadoFormularioAtividade = {};
+// Formulário de pergunta, usado nas atividades do evento e nas perguntas dos
+// modelos da biblioteca. Quem usa passa a ação de salvar (já com os ids).
+
+export type EstadoFormularioPergunta = { erro?: string };
+
+const inicial: EstadoFormularioPergunta = {};
 
 const exemplos: Record<TipoAtividade, string> = {
   multipla: "Ex.: Qual a principal causa de atraso na sua agência?",
@@ -48,25 +52,26 @@ function texto(n: number | null | undefined) {
   return n === null || n === undefined ? "" : String(n);
 }
 
-export default function FormularioAtividade({
-  eventoId,
-  atividadeId,
+export default function FormularioPergunta({
+  acaoSalvar,
+  voltar,
   atividade,
   blocos,
   blocoInicial,
 }: {
-  eventoId: string;
-  atividadeId: string | null;
+  acaoSalvar: (anterior: EstadoFormularioPergunta, formData: FormData) => Promise<EstadoFormularioPergunta>;
+  voltar: string; // endereço do botão Cancelar
   atividade?: { tipo: TipoAtividade; enunciado: string; config: ConfigAtividade };
-  blocos: Bloco[];
-  blocoInicial: string | null;
+  blocos?: Bloco[]; // sem blocos (perguntas de modelo), o campo Bloco não aparece
+  blocoInicial?: string | null;
 }) {
-  const [estado, acao, salvando] = useActionState(salvarAtividade.bind(null, eventoId, atividadeId), inicial);
+  const [estado, acao, salvando] = useActionState(acaoSalvar, inicial);
+  const editando = Boolean(atividade);
 
   const [tipo, setTipo] = useState<TipoAtividade>(atividade?.tipo ?? "multipla");
   const [enunciado, setEnunciado] = useState(atividade?.enunciado ?? "");
   // Toda atividade pertence a um bloco: sem indicação, vai para o primeiro.
-  const [bloco, setBloco] = useState(blocoInicial ?? blocos[0]?.id ?? "");
+  const [bloco, setBloco] = useState(blocoInicial ?? blocos?.[0]?.id ?? "");
 
   const cMultipla = atividade?.tipo === "multipla" ? (atividade.config as ConfigMultipla) : null;
   const [opcoes, setOpcoes] = useState<string[]>(cMultipla?.opcoes ?? ["", "", ""]);
@@ -115,7 +120,7 @@ export default function FormularioAtividade({
       {estado.erro && <Aviso tipo="erro">{estado.erro}</Aviso>}
 
       <input type="hidden" name="tipo" value={tipo} />
-      {atividadeId ? (
+      {editando ? (
         <p className="text-slate-600">
           Tipo: <strong className="font-medium text-slate-800">{rotuloTipo[tipo]}</strong>
         </p>
@@ -140,6 +145,7 @@ export default function FormularioAtividade({
         </fieldset>
       )}
 
+      {blocos && (
       <Campo rotulo="Bloco" dica="Grupo de perguntas do evento, como Abertura ou Estudo de caso 1.">
         <select
           name="bloco"
@@ -155,6 +161,7 @@ export default function FormularioAtividade({
           ))}
         </select>
       </Campo>
+      )}
 
       <Campo rotulo="Pergunta" dica={exemplos[tipo]}>
         <textarea
@@ -348,9 +355,9 @@ export default function FormularioAtividade({
 
       <div className="flex flex-wrap gap-3 pt-2">
         <button type="submit" disabled={salvando || (tipo === "escala" && Boolean(avisoEscala))} className={estiloBotaoCompacto}>
-          {salvando ? "Salvando…" : atividadeId ? "Salvar alterações" : "Criar atividade"}
+          {salvando ? "Salvando…" : editando ? "Salvar alterações" : "Criar pergunta"}
         </button>
-        <Link href={`/painel/evento/${eventoId}#atividades`} className={estiloBotaoSecundario}>
+        <Link href={voltar} className={estiloBotaoSecundario}>
           Cancelar
         </Link>
       </div>

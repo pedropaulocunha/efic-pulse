@@ -6,7 +6,8 @@ import type { ConfigAtividade, EstadoAtividade, TipoAtividade } from "@/lib/ativ
 import { uuidValido } from "@/lib/formatos";
 import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
-import FormularioAtividade from "../formulario-atividade";
+import FormularioPergunta from "@/components/formulario-pergunta";
+import { salvarAtividade } from "../../../acoes-atividades";
 
 type Atividade = {
   tipo: TipoAtividade;
@@ -14,6 +15,7 @@ type Atividade = {
   config: ConfigAtividade;
   estado: EstadoAtividade;
   bloco_id: string | null;
+  modelo_pergunta_id: string | null;
   eventos: { nome_turma: string } | null;
 };
 
@@ -31,7 +33,7 @@ export default async function EditarAtividade({
   const [atividade, blocos] = await Promise.all([
     supabase
       .from("atividades")
-      .select("tipo, enunciado, config, estado, bloco_id, eventos!atividades_evento_id_fkey(nome_turma)")
+      .select("tipo, enunciado, config, estado, bloco_id, modelo_pergunta_id, eventos!atividades_evento_id_fkey(nome_turma)")
       .eq("id", atividadeId)
       .eq("evento_id", id)
       .maybeSingle<Atividade>(),
@@ -50,10 +52,16 @@ export default async function EditarAtividade({
         </Link>
         <h1 className="mt-4 text-2xl font-semibold">Editar atividade</h1>
         <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
-          {a.estado === "fechada" ? (
-            <FormularioAtividade
-              eventoId={id}
-              atividadeId={atividadeId}
+          {a.modelo_pergunta_id ? (
+            <p className="text-slate-600">
+              Esta pergunta vem da biblioteca e é igual em todos os eventos que usam o modelo, para que as respostas
+              possam ser comparadas. Por isso não pode ser alterada aqui. Para mudar de bloco, use o campo
+              &quot;Bloco&quot; na lista de atividades.
+            </p>
+          ) : a.estado === "fechada" ? (
+            <FormularioPergunta
+              acaoSalvar={salvarAtividade.bind(null, id, atividadeId)}
+              voltar={`/painel/evento/${id}#atividades`}
               atividade={a}
               blocos={blocos.data}
               blocoInicial={a.bloco_id}

@@ -43,11 +43,11 @@ type Resposta = {
 
 type Pergunta = Atividade & { numero: number; bloco: string };
 
-const SITUACAO = (aprovada: boolean | null) =>
+export const SITUACAO = (aprovada: boolean | null) =>
   aprovada === true ? "Aprovada" : aprovada === false ? "Recusada" : "Pendente";
 
 // Horário de Brasília, gravado como data do Excel (o Excel não tem fuso).
-function dataBrasilia(iso: string) {
+export function dataBrasilia(iso: string) {
   const partes = Object.fromEntries(
     new Intl.DateTimeFormat("en-US", {
       timeZone: "America/Sao_Paulo",
@@ -67,14 +67,14 @@ function dataBrasilia(iso: string) {
   );
 }
 
-function mediana(ns: number[]) {
+export function mediana(ns: number[]) {
   const o = [...ns].sort((a, b) => a - b);
   const m = Math.floor(o.length / 2);
   return o.length % 2 ? o[m] : (o[m - 1] + o[m]) / 2;
 }
 
 // A resposta em texto legível (a mesma para as abas Respostas e Por participante).
-function textoResposta(p: Pergunta, valor: Record<string, unknown>): string | number {
+export function textoResposta(p: { tipo: TipoAtividade; config: ConfigAtividade }, valor: Record<string, unknown>): string | number {
   switch (p.tipo) {
     case "multipla":
       return (p.config as ConfigMultipla).opcoes[valor.opcao as number] ?? "";
@@ -92,7 +92,7 @@ function textoResposta(p: Pergunta, valor: Record<string, unknown>): string | nu
   }
 }
 
-function estilizarCabecalho(aba: ExcelJS.Worksheet) {
+export function estilizarCabecalho(aba: ExcelJS.Worksheet) {
   const linha = aba.getRow(1);
   linha.font = { bold: true, color: { argb: "FFFFFFFF" } };
   linha.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F4C64" } };

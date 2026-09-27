@@ -5,7 +5,8 @@ import { AvisoErroConexao } from "@/components/ui";
 import { uuidValido } from "@/lib/formatos";
 import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
-import FormularioAtividade from "../formulario-atividade";
+import FormularioPergunta from "@/components/formulario-pergunta";
+import { salvarAtividade } from "../../../acoes-atividades";
 
 export default async function NovaAtividade({
   params,
@@ -45,7 +46,12 @@ export default async function NovaAtividade({
               Abertura) e depois em <strong>+ Atividade</strong> no bloco.
             </p>
           ) : (
-            <FormularioAtividade eventoId={id} atividadeId={null} blocos={blocos.data} blocoInicial={blocoInicial} />
+            <FormularioPergunta
+              acaoSalvar={salvarAtividade.bind(null, id, null)}
+              voltar={`/painel/evento/${id}#atividades`}
+              blocos={blocos.data}
+              blocoInicial={blocoInicial}
+            />
           )}
         </div>
       </main>

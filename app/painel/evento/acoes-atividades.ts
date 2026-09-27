@@ -212,6 +212,17 @@ export async function excluirBloco(eventoId: string, blocoId: string): Promise<{
   return {};
 }
 
+// Copia um modelo da biblioteca para o evento: bloco novo no fim, perguntas ligadas ao modelo.
+export async function usarModelo(eventoId: string, modeloId: string): Promise<{ erro?: string }> {
+  if (!uuidValido(eventoId) || !uuidValido(modeloId)) return { erro: "Escolha um modelo." };
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const { error } = await sessao.supabase.rpc("usar_modelo", { evento: eventoId, modelo: modeloId });
+  if (error) return { erro: "Não foi possível adicionar o bloco da biblioteca. Tente de novo." };
+  revalidatePath(`/painel/evento/${eventoId}`);
+  return {};
+}
+
 export async function duplicarBloco(eventoId: string, blocoId: string): Promise<{ erro?: string }> {
   const sessao = await exigirLogin();
   if ("erro" in sessao) return { erro: sessao.erro };

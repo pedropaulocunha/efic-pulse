@@ -25,7 +25,7 @@ export default async function Painel() {
 
   const supabase = await criarClienteServidor();
   const [perfil, eventos] = await Promise.all([
-    supabase.from("perfis").select("nome").eq("id", user.id).maybeSingle(),
+    supabase.from("perfis").select("nome, papel").eq("id", user.id).maybeSingle(),
     supabase
       .from("eventos")
       .select(
@@ -39,13 +39,21 @@ export default async function Painel() {
 
   const nome = perfil.data?.nome ?? user.email;
   const lista = eventos.data ?? [];
+  const ehAdmin = perfil.data?.papel === "admin";
 
   return (
     <div className="flex flex-1 flex-col">
       <CabecalhoPainel />
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
-        <h1 className="text-3xl font-semibold">Olá, {nome}</h1>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h1 className="text-3xl font-semibold">Olá, {nome}</h1>
+          {ehAdmin && (
+            <Link href="/painel/biblioteca" className="font-medium text-marca underline-offset-4 hover:underline">
+              Biblioteca de modelos →
+            </Link>
+          )}
+        </div>
 
         <section className="mt-10">
           <div className="flex items-center justify-between gap-4">

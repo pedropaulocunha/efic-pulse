@@ -15,6 +15,7 @@ import {
   moverParaBloco,
   reabrirEvento,
   renomearBloco,
+  usarModelo,
 } from "../acoes-atividades";
 
 // Encerrar (instrutor ou admin) ou reabrir (só admin) o evento.
@@ -370,6 +371,73 @@ export function CabecalhoBloco({
         </div>
       )}
       {erro && <p className="mt-1 text-sm text-red-700">{erro}</p>}
+    </div>
+  );
+}
+
+// Adicionar um bloco pronto da biblioteca (perguntas iguais em todos os eventos).
+export function BotaoUsarModelo({
+  eventoId,
+  modelos,
+}: {
+  eventoId: string;
+  modelos: { id: string; titulo: string; perguntas: number }[];
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [modelo, setModelo] = useState("");
+  const [ocupado, iniciar] = useTransition();
+  const [erro, setErro] = useState<string>();
+
+  if (modelos.length === 0) return null;
+  if (!aberto) {
+    return (
+      <button type="button" onClick={() => setAberto(true)} className={estiloBotaoSecundario}>
+        Bloco da biblioteca
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <form
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          setErro(undefined);
+          iniciar(async () => {
+            const r = await usarModelo(eventoId, modelo);
+            if (r.erro) setErro(r.erro);
+            else {
+              setAberto(false);
+              setModelo("");
+            }
+          });
+        }}
+        className="flex flex-wrap items-center gap-2"
+      >
+        <select
+          value={modelo}
+          onChange={(ev) => setModelo(ev.target.value)}
+          required
+          aria-label="Modelo da biblioteca"
+          className="h-11 min-w-56 rounded-lg border border-slate-300 bg-white px-3 text-base"
+        >
+          <option value="" disabled>
+            Escolha o modelo…
+          </option>
+          {modelos.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.titulo} ({m.perguntas === 1 ? "1 pergunta" : `${m.perguntas} perguntas`})
+            </option>
+          ))}
+        </select>
+        <button type="submit" disabled={ocupado || !modelo} className={estiloBotaoSecundario}>
+          {ocupado ? "Adicionando…" : "Adicionar"}
+        </button>
+        <button type="button" onClick={() => setAberto(false)} className="h-11 px-2 text-slate-500 hover:underline">
+          Cancelar
+        </button>
+      </form>
+      {erro && <p className="mt-2 text-sm text-red-700">{erro}</p>}
     </div>
   );
 }

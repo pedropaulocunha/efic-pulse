@@ -140,6 +140,13 @@ values
   ('00000000-0000-4000-9000-0000000000a1', '00000000-0000-4000-c000-00000000000a', 1, 'Abertura do A'),
   ('00000000-0000-4000-9000-0000000000b1', '00000000-0000-4000-c000-00000000000b', 1, 'Abertura do B');
 
+-- Biblioteca (0026): um modelo com uma pergunta, criado pela Efic.
+insert into public.modelos (id, titulo)
+values ('00000000-0000-4000-8000-000000000001', 'Quebra gelo');
+insert into public.modelo_perguntas (id, modelo_id, ordem, tipo, enunciado, config)
+values ('00000000-0000-4000-8000-0000000000f1', '00000000-0000-4000-8000-000000000001', 1, 'multipla',
+        'Como você chegou hoje?', '{"opcoes": ["Animado", "Cansado"]}');
+
 -- Atividades: duas no evento do A (múltipla e escala com referência), uma no do B (nuvem).
 insert into public.atividades (id, evento_id, bloco_id, ordem, tipo, enunciado, config)
 values
@@ -637,6 +644,52 @@ begin
     null;
   end;
 
+  -- Biblioteca (0026): lê e usa os modelos; não cria nem altera; não roda o comparativo.
+  if (select count(*) from public.modelos where id = '00000000-0000-4000-8000-000000000001') <> 1 then
+    raise exception 'FALHOU: instrutor A não vê os modelos da biblioteca';
+  end if;
+  begin
+    insert into public.modelos (titulo) values ('Modelo do instrutor');
+    raise exception 'FALHOU: instrutor criou modelo na biblioteca';
+  exception when insufficient_privilege then
+    null;
+  end;
+  update public.modelo_perguntas set enunciado = 'Mudada por A' where id = '00000000-0000-4000-8000-0000000000f1';
+  get diagnostics linhas = row_count;
+  if linhas <> 0 then
+    raise exception 'FALHOU: instrutor alterou pergunta da biblioteca';
+  end if;
+  perform public.usar_modelo('00000000-0000-4000-c000-00000000000a', '00000000-0000-4000-8000-000000000001');
+  if (select count(*) from public.atividades
+       where evento_id = '00000000-0000-4000-c000-00000000000a'
+         and modelo_pergunta_id = '00000000-0000-4000-8000-0000000000f1') <> 1 then
+    raise exception 'FALHOU: instrutor A não usou o modelo no próprio evento';
+  end if;
+  begin
+    perform public.usar_modelo('00000000-0000-4000-c000-00000000000b', '00000000-0000-4000-8000-000000000001');
+    raise exception 'FALHOU: instrutor A usou modelo no evento do B';
+  exception when no_data_found then
+    null;
+  end;
+  begin
+    update public.atividades set enunciado = 'Mudei a pergunta da biblioteca'
+     where modelo_pergunta_id = '00000000-0000-4000-8000-0000000000f1';
+    raise exception 'FALHOU: pergunta da biblioteca foi alterada no evento';
+  exception when check_violation then
+    null;
+  end;
+  begin
+    insert into public.atividades (evento_id, bloco_id, ordem, tipo, enunciado, config, modelo_pergunta_id)
+    values ('00000000-0000-4000-c000-00000000000a', '00000000-0000-4000-9000-0000000000a1', 9, 'multipla',
+            'Falsa', '{"opcoes": ["X", "Y"]}', '00000000-0000-4000-8000-0000000000f1');
+    raise exception 'FALHOU: aceitou atividade ligada à biblioteca mas diferente do modelo';
+  exception when check_violation then
+    null;
+  end;
+  if public.comparativo_modelo('00000000-0000-4000-8000-000000000001') is not null then
+    raise exception 'FALHOU: instrutor roda o comparativo da biblioteca';
+  end if;
+
   -- Não encerra o evento do B.
   begin
     perform public.encerrar_evento('00000000-0000-4000-c000-00000000000b');
@@ -745,6 +798,28 @@ begin
     null;
   end;
 
+  -- Biblioteca: admin roda o comparativo (o evento do A usou o modelo) e
+  -- não troca as opções de pergunta já usada.
+  if jsonb_array_length(public.comparativo_modelo('00000000-0000-4000-8000-000000000001') -> 'eventos') <> 1 then
+    raise exception 'FALHOU: comparativo do admin não trouxe o evento que usou o modelo';
+  end if;
+  if public.comparativo_modelo('00000000-0000-4000-8000-000000000001')::text ~* 'inscricao|pessoa|email' then
+    raise exception 'FALHOU: comparativo expõe quem respondeu';
+  end if;
+  begin
+    update public.modelo_perguntas set config = '{"opcoes": ["Animado", "Cansado", "Outro"]}'
+     where id = '00000000-0000-4000-8000-0000000000f1';
+    raise exception 'FALHOU: mudou as opções de pergunta da biblioteca já usada';
+  exception when check_violation then
+    null;
+  end;
+  update public.modelo_perguntas set enunciado = 'Como você chegou hoje ao treinamento?'
+   where id = '00000000-0000-4000-8000-0000000000f1';
+  get diagnostics linhas = row_count;
+  if linhas <> 1 then
+    raise exception 'FALHOU: admin não ajustou o texto da pergunta da biblioteca';
+  end if;
+
   -- Admin vê atividades e resultados de qualquer evento.
   if (select count(*) from public.atividades where evento_id = '00000000-0000-4000-c000-00000000000b') <> 2 then
     raise exception 'FALHOU: admin não vê as atividades do evento do B';
@@ -808,6 +883,18 @@ begin
   begin
     perform public.sala_estado(repeat('a', 64));
     raise exception 'FALHOU: visitante sem login executa sala_estado';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform 1 from public.modelos;
+    raise exception 'FALHOU: visitante sem login lê a biblioteca';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.comparativo_modelo('00000000-0000-4000-8000-000000000001');
+    raise exception 'FALHOU: visitante sem login roda o comparativo';
   exception when insufficient_privilege then
     null;
   end;

@@ -25,6 +25,7 @@ import {
   BotaoEstadoEvento,
   BotaoNovoBloco,
   BotoesAtividade,
+  BotaoUsarModelo,
   CabecalhoBloco,
   SeletorBloco,
 } from "./botoes-evento";
@@ -38,6 +39,7 @@ type Atividade = {
   config: ConfigAtividade;
   estado: EstadoAtividade;
   rodada_atual: number;
+  modelo_pergunta_id: string | null;
 };
 
 // Resumo da configuração, numa linha.
@@ -102,7 +104,7 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
   if (!user) redirect("/login");
 
   const supabase = await criarClienteServidor();
-  const [evento, participantes, atividades, blocos, perfil] = await Promise.all([
+  const [evento, participantes, atividades, blocos, perfil, modelos] = await Promise.all([
     supabase
       .from("eventos")
       .select(
@@ -113,13 +115,15 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
     supabase.from("inscricoes").select("id", { count: "exact", head: true }).eq("evento_id", id),
     supabase
       .from("atividades")
-      .select("id, ordem, bloco_id, tipo, enunciado, config, estado, rodada_atual")
+      .select("id, ordem, bloco_id, tipo, enunciado, config, estado, rodada_atual, modelo_pergunta_id")
       .eq("evento_id", id)
       .returns<Atividade[]>(),
     supabase.from("blocos").select("id, ordem, titulo").eq("evento_id", id).returns<Bloco[]>(),
     supabase.from("perfis").select("papel").eq("id", user.id).maybeSingle(),
+    // Modelos da biblioteca que podem ser usados neste evento.
+    supabase.from("modelos").select("id, titulo, modelo_perguntas(count)").eq("arquivado", false).order("titulo"),
   ]);
-  if (evento.error || participantes.error || atividades.error || blocos.error || perfil.error) {
+  if (evento.error || participantes.error || atividades.error || blocos.error || perfil.error || modelos.error) {
     return <AvisoErroConexao />;
   }
   const ehAdmin = perfil.data?.papel === "admin";
@@ -209,6 +213,14 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
             <h2 className="text-lg font-medium text-slate-700">Atividades ({totalAtividades})</h2>
             <div className="flex flex-wrap items-start gap-3">
               <BotaoNovoBloco eventoId={e.id} />
+              <BotaoUsarModelo
+                eventoId={e.id}
+                modelos={modelos.data.map((m) => ({
+                  id: m.id,
+                  titulo: m.titulo,
+                  perguntas: (m.modelo_perguntas as unknown as { count: number }[])[0]?.count ?? 0,
+                }))}
+              />
               {blocos.data.length > 0 && (
                 <Link href={`/painel/evento/${e.id}/atividade/nova`} className={estiloBotaoSecundario}>
                   Nova atividade
@@ -220,7 +232,8 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
           {grupos.length === 0 ? (
             <p className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-slate-500">
               Nenhuma atividade ainda. Toda pergunta fica dentro de um bloco: comece em <strong>Novo bloco</strong>
-              (ex.: Abertura) e depois toque em <strong>+ Atividade</strong> no bloco.
+              (ex.: Abertura) e depois toque em <strong>+ Atividade</strong> no bloco, ou use um{" "}
+              <strong>Bloco da biblioteca</strong> pronto.
             </p>
           ) : (
             <div className="mt-4 space-y-6">
@@ -270,7 +283,15 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
                                 {rotuloEstadoAtividade[a.estado]}
                                 {a.rodada_atual > 1 ? ` · rodada ${a.rodada_atual}` : ""}
                               </span>
-                              {a.estado === "fechada" && (
+                              {a.modelo_pergunta_id && (
+                                <span
+                                  title="Igual em todos os eventos que usam o modelo; não pode ser editada."
+                                  className="rounded-full bg-violet-100 px-3 py-1 text-sm text-violet-800"
+                                >
+                                  Da biblioteca
+                                </span>
+                              )}
+                              {a.estado === "fechada" && !a.modelo_pergunta_id && (
                                 <Link
                                   href={`/painel/evento/${e.id}/atividade/${a.id}`}
                                   className="inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-slate-600 hover:bg-slate-50"
