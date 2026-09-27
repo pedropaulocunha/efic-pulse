@@ -23,10 +23,15 @@ export const CORES_TEXTO = [
   "#6a52c9", // violeta
 ] as const;
 
-// Escala (uma medida só): barras em petróleo; referência em coral.
+// Escala e número (uma medida só): barras em petróleo; referência em coral;
+// média em violeta (linha cheia) e mediana em quase-preto (linha tracejada).
+// Petróleo, coral e este violeta passam juntos no validador (todos os pares,
+// 27/09/2026); a mediana se distingue também pelo tracejado.
 export const COR_ESCALA = CORES_OPCOES[0];
 export const COR_REFERENCIA = CORES_OPCOES[1];
 export const COR_REFERENCIA_TEXTO = CORES_TEXTO[1];
+export const COR_MEDIA = "#7c3aed";
+export const COR_MEDIANA = "#0f172a";
 
 // Cor de cada palavra da nuvem: cada palavra nova pega a PRÓXIMA cor da fila
 // (as seis primeiras nunca repetem) e fica com ela enquanto o telão estiver aberto,

@@ -90,7 +90,8 @@ export default function Telao({
     <main className="relative flex h-screen w-screen flex-col overflow-hidden bg-white px-[5vw] py-[5vh] text-slate-900">
       {atividade ? (
         <div className="flex min-h-0 flex-1 flex-col pb-[10vh]">
-          <h1 className="text-[3.6vw] font-semibold leading-tight">{atividade.enunciado}</h1>
+          {/* O menor entre largura e altura: não cresce demais em tela larga e baixa. */}
+          <h1 className="text-[min(2.6vw,4.6vh)] font-semibold leading-tight">{atividade.enunciado}</h1>
 
           {/* my-auto centraliza quando cabe e nunca sobe por cima da pergunta quando não cabe. */}
           <div className="mt-[4vh] flex min-h-0 flex-1 flex-col">

@@ -15,6 +15,8 @@ import {
 } from "@/lib/atividades";
 import {
   COR_ESCALA,
+  COR_MEDIA,
+  COR_MEDIANA,
   COR_REFERENCIA,
   COR_REFERENCIA_TEXTO,
   CORES_OPCOES,
@@ -205,6 +207,23 @@ function faixasDoEixo(
   return { faixas, lo, hi, indice: (v) => Math.min(FAIXAS_NUMERO - 1, Math.max(0, Math.floor((v - lo) / largura))) };
 }
 
+// Pedacinho da linha do gráfico, ao lado do número que ela representa.
+function AmostraLinha({ cor, tracejada = false, grossa = false }: { cor: string; tracejada?: boolean; grossa?: boolean }) {
+  return (
+    <svg viewBox="0 0 40 10" className="h-[1.2vw] w-[3vw] shrink-0" aria-hidden>
+      <line
+        x1={0}
+        x2={40}
+        y1={5}
+        y2={5}
+        stroke={cor}
+        strokeWidth={grossa ? 5 : 3.5}
+        strokeDasharray={tracejada ? "7 5" : undefined}
+      />
+    </svg>
+  );
+}
+
 export function HistogramaNumerico({
   tipo,
   config,
@@ -233,30 +252,40 @@ export function HistogramaNumerico({
   const L = 1000;
   const A = 418;
   const largura = L / faixas.length;
-  const x = (v: number) => ((v - lo) / (hi - lo || 1)) * L;
+  // Barras de valor exato (escala, número inteiro): a linha passa pelo centro da barra do valor.
+  // Barras de faixa (número com faixas iguais): o eixo é contínuo, da borda esquerda à direita.
+  const discreto = faixas.every((f) => f.inicio === f.fim) || tipo === "escala";
+  const x = (v: number) =>
+    discreto
+      ? ((v - lo) / (hi - lo || 1)) * (L - largura) + largura / 2
+      : ((v - lo) / (hi - lo || 1)) * L;
   const referencia = typeof config.referencia === "number" ? config.referencia : null;
 
   const linhas = [
-    resultado.media !== null && { valor: Number(resultado.media), rotulo: "média", cor: "#0f172a", tracejado: false },
-    resultado.mediana !== null && { valor: Number(resultado.mediana), rotulo: "mediana", cor: "#0f172a", tracejado: true },
+    resultado.media !== null && { valor: Number(resultado.media), rotulo: "média", cor: COR_MEDIA, tracejado: false },
+    resultado.mediana !== null && { valor: Number(resultado.mediana), rotulo: "mediana", cor: COR_MEDIANA, tracejado: true },
     referencia !== null && { valor: referencia, rotulo: "referência", cor: COR_REFERENCIA, tracejado: false },
   ].filter(Boolean) as { valor: number; rotulo: string; cor: string; tracejado: boolean }[];
 
   const numero = (v: number | null | undefined) => (v === null || v === undefined ? "—" : formatarNumero(Number(v), unidade));
 
+  // Cada número vem com a amostra da própria linha: é a legenda (sem repetir embaixo).
   return (
     <div className="flex w-full flex-col">
-      <div className="mb-[2vh] flex flex-wrap gap-x-[3vw] gap-y-[1vh] text-[2.2vw] text-slate-700">
-        <span>
+      <div className="mb-[2vh] flex flex-wrap items-center gap-x-[3vw] gap-y-[1vh] text-[2vw] text-slate-700">
+        <span className="inline-flex items-center gap-[0.7vw]">
+          <AmostraLinha cor={COR_MEDIA} />
           Média <strong className="tabular-nums text-slate-900">{numero(resultado.media)}</strong>
-          {anterior && <span className="ml-[0.5vw] text-[1.5vw] text-slate-500">(antes {numero(anterior.media)})</span>}
+          {anterior && <span className="text-[1.4vw] text-slate-500">(antes {numero(anterior.media)})</span>}
         </span>
-        <span>
+        <span className="inline-flex items-center gap-[0.7vw]">
+          <AmostraLinha cor={COR_MEDIANA} tracejada />
           Mediana <strong className="tabular-nums text-slate-900">{numero(resultado.mediana)}</strong>
-          {anterior && <span className="ml-[0.5vw] text-[1.5vw] text-slate-500">(antes {numero(anterior.mediana)})</span>}
+          {anterior && <span className="text-[1.4vw] text-slate-500">(antes {numero(anterior.mediana)})</span>}
         </span>
         {referencia !== null && (
-          <span style={{ color: COR_REFERENCIA_TEXTO }}>
+          <span className="inline-flex items-center gap-[0.7vw]" style={{ color: COR_REFERENCIA_TEXTO }}>
+            <AmostraLinha cor={COR_REFERENCIA} grossa />
             Referência <strong className="tabular-nums">{numero(referencia)}</strong>
           </span>
         )}
@@ -265,7 +294,7 @@ export function HistogramaNumerico({
       <svg
         viewBox={`0 0 ${L} 420`}
         preserveAspectRatio="none"
-        className="h-[36vh] w-full"
+        className="h-[32vh] w-full"
         role="img"
         aria-label="Histograma das respostas"
       >
@@ -291,29 +320,33 @@ export function HistogramaNumerico({
           );
         })}
         {linhas.map((l) => (
-          <line
-            key={l.rotulo}
-            x1={x(l.valor)}
-            x2={x(l.valor)}
-            y1={8}
-            y2={A}
-            stroke={l.cor}
-            strokeWidth={l.rotulo === "referência" ? 5 : 3}
-            strokeDasharray={l.tracejado ? "10 8" : undefined}
-            vectorEffect="non-scaling-stroke"
-          />
+          <g key={l.rotulo}>
+            {/* Contorno branco: a linha continua visível por cima das barras. */}
+            <line
+              x1={x(l.valor)}
+              x2={x(l.valor)}
+              y1={8}
+              y2={A}
+              stroke="#ffffff"
+              strokeWidth={l.rotulo === "referência" ? 9 : 7}
+              vectorEffect="non-scaling-stroke"
+            />
+            <line
+              x1={x(l.valor)}
+              x2={x(l.valor)}
+              y1={8}
+              y2={A}
+              stroke={l.cor}
+              strokeWidth={l.rotulo === "referência" ? 5 : 3}
+              strokeDasharray={l.tracejado ? "10 8" : undefined}
+              vectorEffect="non-scaling-stroke"
+            />
+          </g>
         ))}
       </svg>
-      <div className="mt-[0.5vh] flex justify-between text-[1.5vw] text-slate-500">
+      <div className="mt-[0.5vh] flex justify-between text-[1.4vw] text-slate-500">
         <span>{formatarNumero(lo, unidade)}</span>
         <span>{formatarNumero(hi, unidade)}</span>
-      </div>
-
-      <div className="mt-[1.5vh] flex flex-wrap gap-x-[3vw] text-[1.5vw] text-slate-500">
-        <span>— linha cheia: média</span>
-        <span>- - tracejada: mediana</span>
-        {referencia !== null && <span style={{ color: COR_REFERENCIA_TEXTO }}>— coral: referência</span>}
-        {anterior && <span>barra clara: rodada 1</span>}
       </div>
     </div>
   );
