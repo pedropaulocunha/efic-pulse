@@ -361,6 +361,25 @@ export function HistogramaNumerico({
 // Nuvem de palavras: tamanho proporcional à frequência
 // ---------------------------------------------------------------
 
+// Estilos de letra da nuvem: família, peso e itálico variam de palavra para palavra.
+// O tamanho continua dizendo a frequência; o estilo é só para dar vida à nuvem.
+const ESTILOS_NUVEM: { familia: string; peso: number; italico: boolean }[] = [
+  { familia: "var(--font-geist-sans)", peso: 800, italico: false },
+  { familia: "var(--font-plex-serif-italico)", peso: 700, italico: true },
+  { familia: "var(--font-plex-sans-nuvem)", peso: 300, italico: false },
+  { familia: "var(--font-plex-serif)", peso: 600, italico: false },
+  { familia: "var(--font-plex-sans-nuvem)", peso: 500, italico: true },
+  { familia: "var(--font-geist-sans)", peso: 600, italico: false },
+  { familia: "var(--font-plex-sans-nuvem)", peso: 600, italico: true },
+];
+
+// Sempre o mesmo estilo para a mesma palavra (não pisca quando chega resposta nova).
+function estiloDaPalavra(chave: string) {
+  let h = 0;
+  for (const c of chave) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return ESTILOS_NUVEM[h % ESTILOS_NUVEM.length];
+}
+
 export function NuvemPalavras({ resultado }: { resultado: Resultado<"nuvem"> }) {
   const palavras = resultado.palavras.slice(0, 60);
   if (palavras.length === 0) return null;
@@ -377,6 +396,7 @@ export function NuvemPalavras({ resultado }: { resultado: Resultado<"nuvem"> }) 
     <div className="flex w-full flex-wrap items-center justify-center gap-x-[2.2cqw] gap-y-[1cqh]">
       {arrumadas.map((p) => {
         const peso = Math.sqrt(p.n / maior); // área proporcional à frequência
+        const estilo = estiloDaPalavra(p.chave);
         return (
           <span
             key={p.chave}
@@ -384,7 +404,10 @@ export function NuvemPalavras({ resultado }: { resultado: Resultado<"nuvem"> }) 
             className="leading-none"
             style={{
               fontSize: `${1.6 + peso * 5.4}cqw`,
-              fontWeight: peso > 0.6 ? 700 : peso > 0.3 ? 600 : 500,
+              fontFamily: estilo.familia,
+              // Letra fina só nas palavras grandes: pequena e fina some no projetor.
+              fontWeight: estilo.peso < 500 && peso < 0.5 ? 500 : estilo.peso,
+              fontStyle: estilo.italico ? "italic" : "normal",
               color: cores.get(p.chave),
             }}
           >

@@ -26,6 +26,24 @@ const plexSerif = IBM_Plex_Serif({
   weight: ["600", "700"],
 });
 
+// Variações só da nuvem de palavras no telão (itálicos e pesos extras).
+// Sem pré-carregamento: o navegador só baixa se a nuvem aparecer.
+const plexSerifItalico = IBM_Plex_Serif({
+  variable: "--font-plex-serif-italico",
+  subsets: ["latin"],
+  weight: ["600", "700"],
+  style: ["italic"],
+  preload: false,
+});
+
+const plexSansNuvem = IBM_Plex_Sans({
+  variable: "--font-plex-sans-nuvem",
+  subsets: ["latin"],
+  weight: ["300", "500", "600"],
+  style: ["normal", "italic"],
+  preload: false,
+});
+
 export const metadata: Metadata = {
   title: "Pulse · Efic",
   description: "Plataforma de sala da Efic Soluções para treinamentos presenciais.",
@@ -40,7 +58,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="pt-BR"
-      className={`${geistSans.variable} ${geistMono.variable} ${plexSans.variable} ${plexSerif.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${plexSans.variable} ${plexSerif.variable} ${plexSerifItalico.variable} ${plexSansNuvem.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans">{children}</body>
     </html>
