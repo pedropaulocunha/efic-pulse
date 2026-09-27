@@ -7,6 +7,7 @@ import {
   type EstadoAtividade,
   type TipoAtividade,
 } from "@/lib/atividades";
+import { ordenarPorBloco, type Bloco } from "@/lib/blocos";
 import type { EstadoProjecao, ResultadoAgregado } from "@/utils/projecao";
 
 // O que o controle do instrutor mostra. Usa o login do instrutor: as políticas
@@ -18,6 +19,7 @@ import type { EstadoProjecao, ResultadoAgregado } from "@/utils/projecao";
 export type AtividadeControle = {
   id: string;
   ordem: number;
+  bloco_id: string | null;
   tipo: TipoAtividade;
   enunciado: string;
   config: ConfigAtividade;
@@ -51,8 +53,9 @@ export type EstadoControle = {
     projecaoToken: string;
     atividadeAtualId: string | null;
   };
-  inscritos: number;
-  atividades: AtividadeControle[];
+  participantes: number; // celulares que entraram no evento
+  blocos: Bloco[];
+  atividades: AtividadeControle[]; // na ordem da tela (blocos)
   moderacao: Moderacao | null;
   previa: EstadoProjecao["atividade"];
 };
@@ -128,7 +131,7 @@ export async function estadoControle(
   eventoId: string,
   selecionadaId?: string | null,
 ): Promise<EstadoControle | null> {
-  const [evento, atividades, inscritos] = await Promise.all([
+  const [evento, atividades, blocos, participantes] = await Promise.all([
     supabase
       .from("eventos")
       .select("id, nome_turma, codigo_acesso, projecao_token, atividade_atual_id, cooperativa:cooperativas(nome)")
@@ -136,30 +139,32 @@ export async function estadoControle(
       .maybeSingle(),
     supabase
       .from("atividades")
-      .select("id, ordem, tipo, enunciado, config, estado, resultado_visivel, referencia_revelada, rodada_atual")
-      .eq("evento_id", eventoId)
-      .order("ordem")
-      .order("id"),
+      .select("id, ordem, bloco_id, tipo, enunciado, config, estado, resultado_visivel, referencia_revelada, rodada_atual")
+      .eq("evento_id", eventoId),
+    supabase.from("blocos").select("id, ordem, titulo").eq("evento_id", eventoId),
     supabase.from("inscricoes").select("id", { count: "exact", head: true }).eq("evento_id", eventoId),
   ]);
   if (evento.error) throw evento.error;
   if (atividades.error) throw atividades.error;
-  if (inscritos.error) throw inscritos.error;
+  if (blocos.error) throw blocos.error;
+  if (participantes.error) throw participantes.error;
   if (!evento.data) return null;
 
   // Resultado agregado (rodada atual) das que já foram abertas: dá o total de cada uma
   // e, para a selecionada, a moderação e a prévia.
+  const naOrdem = ordenarPorBloco(atividades.data as Omit<AtividadeControle, "respostas">[], blocos.data);
   const resultados = await Promise.all(
-    atividades.data.map(async (a): Promise<ResultadoAgregado | null> => {
+    naOrdem.map(async (a): Promise<ResultadoAgregado | null> => {
       if (a.estado === "fechada") return null;
       const r = await supabase.rpc("resultado_atividade", { atividade: a.id });
       if (r.error) throw r.error;
       return (r.data as ResultadoAgregado) ?? null;
     }),
   );
-  const lista: AtividadeControle[] = atividades.data.map((a, i) => ({ ...a, respostas: resultados[i]?.total ?? 0 }));
+  const lista: AtividadeControle[] = naOrdem.map((a, i) => ({ ...a, respostas: resultados[i]?.total ?? 0 }));
 
-  const indice = lista.findIndex((a) => a.id === selecionadaId);
+  // Sem seleção: a primeira da lista (na ordem dos blocos).
+  const indice = selecionadaId ? lista.findIndex((a) => a.id === selecionadaId) : lista.length > 0 ? 0 : -1;
   const selecionada = indice >= 0 ? lista[indice] : undefined;
   const resultado = indice >= 0 ? resultados[indice] : null;
   const [moderacao, previa] = await Promise.all([
@@ -177,7 +182,8 @@ export async function estadoControle(
       projecaoToken: evento.data.projecao_token,
       atividadeAtualId: evento.data.atividade_atual_id,
     },
-    inscritos: inscritos.count ?? 0,
+    participantes: participantes.count ?? 0,
+    blocos: [...blocos.data].sort((x, y) => x.ordem - y.ordem),
     atividades: lista,
     moderacao,
     previa,

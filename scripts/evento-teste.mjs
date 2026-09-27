@@ -1,5 +1,5 @@
-// Evento de teste de carga: 40 inscritos fictícios (teste01@pulse.teste a teste40@pulse.teste)
-// e seis atividades (uma de cada tipo).
+// Evento de teste de carga: seis atividades (uma de cada tipo), em dois blocos.
+// Os participantes entram só com o código (o k6 faz isso por eles).
 //
 // No PowerShell, dentro da pasta do projeto:
 //   node --env-file=.env.local scripts/evento-teste.mjs criar
@@ -11,7 +11,6 @@ import { createClient } from "@supabase/supabase-js";
 
 const NOME = "TESTE DE CARGA — pode apagar";
 const COOPERATIVA = "Cooperativa de Teste de Carga";
-const TOTAL = 40;
 
 if (!process.env.SUPABASE_SECRET_KEY) {
   console.error("Falta SUPABASE_SECRET_KEY. Rode com: node --env-file=.env.local scripts/evento-teste.mjs criar");
@@ -26,8 +25,6 @@ function falhar(etapa, error) {
   console.error(`Erro ao ${etapa}:`, error.message);
   process.exit(1);
 }
-
-const emails = Array.from({ length: TOTAL }, (_, i) => `teste${String(i + 1).padStart(2, "0")}@pulse.teste`);
 
 async function criar() {
   const existente = await db.from("eventos").select("id, codigo_acesso, projecao_token").eq("nome_turma", NOME).maybeSingle();
@@ -52,23 +49,21 @@ async function criar() {
     .single();
   if (evento.error) falhar("criar evento", evento.error);
 
-  const pessoas = await db
-    .from("pessoas")
-    .upsert(
-      emails.map((email, i) => ({ nome: `Participante de Teste ${String(i + 1).padStart(2, "0")}`, email })),
-      { onConflict: "email" },
-    )
-    .select("id");
-  if (pessoas.error) falhar("criar pessoas", pessoas.error);
-
-  const inscricoes = await db.from("inscricoes").insert(
-    pessoas.data.map((p) => ({ pessoa_id: p.id, evento_id: evento.data.id, origem: "lista", confirmada: true })),
-  );
-  if (inscricoes.error) falhar("inscrever", inscricoes.error);
+  const blocos = await db
+    .from("blocos")
+    .insert([
+      { evento_id: evento.data.id, ordem: 1, titulo: "Abertura" },
+      { evento_id: evento.data.id, ordem: 2, titulo: "Estudo de caso 1" },
+    ])
+    .select("id, ordem")
+    .order("ordem");
+  if (blocos.error) falhar("criar blocos", blocos.error);
+  const [abertura, caso1] = blocos.data.map((b) => b.id);
 
   const atividades = await db.from("atividades").insert([
     {
       evento_id: evento.data.id,
+      bloco_id: abertura,
       ordem: 1,
       tipo: "multipla",
       enunciado: "Qual a principal causa de atraso na sua agência?",
@@ -76,6 +71,7 @@ async function criar() {
     },
     {
       evento_id: evento.data.id,
+      bloco_id: abertura,
       ordem: 2,
       tipo: "escala",
       enunciado: "Quanto da carteira em atraso vocês recuperam em 90 dias?",
@@ -83,6 +79,7 @@ async function criar() {
     },
     {
       evento_id: evento.data.id,
+      bloco_id: abertura,
       ordem: 3,
       tipo: "nuvem",
       enunciado: "Em até três palavras: o que trava a cobrança?",
@@ -90,21 +87,24 @@ async function criar() {
     },
     {
       evento_id: evento.data.id,
-      ordem: 4,
+      bloco_id: caso1,
+      ordem: 1,
       tipo: "ordenar",
       enunciado: "Ordene as etapas da cobrança, da primeira à última.",
       config: { itens: ["Contato amigável", "Negociação", "Acordo formal", "Cobrança judicial"] },
     },
     {
       evento_id: evento.data.id,
-      ordem: 5,
+      bloco_id: caso1,
+      ordem: 2,
       tipo: "numero",
       enunciado: "Em quantos dias de atraso vocês fazem o primeiro contato?",
       config: { casas: 0, unidade: "dias", min: 0, max: 120, referencia: 5 },
     },
     {
       evento_id: evento.data.id,
-      ordem: 6,
+      bloco_id: caso1,
+      ordem: 3,
       tipo: "aberta",
       enunciado: "Conte, em uma frase, um caso de renegociação que deu certo.",
       config: { max_caracteres: 280 },
@@ -112,7 +112,7 @@ async function criar() {
   ]);
   if (atividades.error) falhar("criar atividades", atividades.error);
 
-  console.log(`Evento de teste criado com ${TOTAL} inscritos e 6 atividades.`);
+  console.log("Evento de teste criado com 2 blocos e 6 atividades.");
   mostrar(evento.data);
 }
 
@@ -137,20 +137,11 @@ async function apagar() {
     if (r.error) falhar("apagar evento", r.error);
   }
 
-  // Pessoas de teste que não estão em nenhum outro evento.
-  const pessoas = await db.from("pessoas").select("id, inscricoes(id)").in("email", emails);
-  if (pessoas.error) falhar("procurar pessoas", pessoas.error);
-  const soltas = pessoas.data.filter((p) => p.inscricoes.length === 0).map((p) => p.id);
-  if (soltas.length > 0) {
-    const r = await db.from("pessoas").delete().in("id", soltas);
-    if (r.error) falhar("apagar pessoas", r.error);
-  }
-
   const coop = await db.from("cooperativas").select("id, eventos(id)").eq("nome", COOPERATIVA);
   const coopSoltas = (coop.data ?? []).filter((c) => c.eventos.length === 0).map((c) => c.id);
   if (coopSoltas.length > 0) await db.from("cooperativas").delete().in("id", coopSoltas);
 
-  console.log(`Apagado: ${eventos.data.length} evento(s) de teste e ${soltas.length} pessoa(s) de teste.`);
+  console.log(`Apagado: ${eventos.data.length} evento(s) de teste.`);
 }
 
 const acao = process.argv[2];

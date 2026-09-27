@@ -68,7 +68,7 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
     inicial,
     { ouvirRespostas: true, aoPerderSessao: () => router.replace("/login") },
   );
-  const { evento, atividades, inscritos, moderacao, previa } = dados;
+  const { evento, atividades, blocos, participantes, moderacao, previa } = dados;
 
   const selecionada = atividades.find((a) => a.id === selecionadaId) ?? atividades[0] ?? null;
   const aberta = atividades.find((a) => a.estado === "aberta") ?? null;
@@ -109,13 +109,20 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
         </div>
       ) : (
         <div className="grid flex-1 gap-5 p-5 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-          {/* Lista das atividades, na ordem */}
+          {/* Lista das atividades, na ordem, com o título de cada bloco */}
           <ol className="space-y-2">
             {atividades.map((a, i) => {
               const ativa = selecionada?.id === a.id;
               const noTelao = evento.atividadeAtualId === a.id && (a.estado === "aberta" || a.resultado_visivel);
+              const comecaBloco = blocos.length > 0 && (i === 0 || a.bloco_id !== atividades[i - 1].bloco_id);
+              const tituloBloco = blocos.find((b) => b.id === a.bloco_id)?.titulo ?? "Sem bloco";
               return (
                 <li key={a.id}>
+                  {comecaBloco && (
+                    <p className={`mb-2 px-1 text-sm font-semibold uppercase tracking-wide text-marca ${i > 0 ? "mt-5" : ""}`}>
+                      {tituloBloco}
+                    </p>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -164,7 +171,7 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
                 <p className="mt-5 text-4xl font-semibold tabular-nums">
                   {selecionada.respostas}
                   <span className="ml-2 text-lg font-normal text-slate-500">
-                    {selecionada.respostas === 1 ? "resposta" : "respostas"} de {inscritos} inscritos
+                    {selecionada.respostas === 1 ? "resposta" : "respostas"} de {participantes} na sala
                     {selecionada.rodada_atual > 1 ? ` nesta rodada` : ""}
                   </span>
                 </p>

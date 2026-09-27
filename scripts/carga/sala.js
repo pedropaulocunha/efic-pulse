@@ -1,5 +1,5 @@
 // Teste de carga da sala ao vivo (k6).
-// 40 participantes entram pelo código e pelo e-mail, esperam uma atividade
+// 40 participantes entram só com o código (anônimos), esperam uma atividade
 // aberta e respondem quase ao mesmo tempo.
 //
 //   k6 run -e CODIGO=XXXX scripts/carga/sala.js
@@ -53,17 +53,13 @@ export const options = {
 
 const json = (nome) => ({ headers: { "Content-Type": "application/json" }, tags: { nome } });
 
-function email(numero) {
-  return `teste${String(numero).padStart(2, "0")}@pulse.teste`;
-}
-
 // Confere o código com UM participante antes de soltar os 40: com código errado,
 // 40 tentativas erradas bloqueariam o IP desta máquina por alguns minutos.
 export function setup() {
   if (!/^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$/.test(CODIGO)) {
     fail("Informe o código de acesso: k6 run -e CODIGO=XXXX scripts/carga/sala.js");
   }
-  const r = http.post(`${BASE}/api/sala/entrar`, JSON.stringify({ codigo: CODIGO, email: email(1) }), json("entrar"));
+  const r = http.post(`${BASE}/api/sala/entrar`, JSON.stringify({ codigo: CODIGO }), json("entrar"));
   if (r.status !== 200) fail(`O código ${CODIGO} não funcionou (${r.status}: ${r.body}). Confira o evento de teste.`);
   console.log(`Código ${CODIGO} conferido. Abra uma atividade no controle: os ${PARTICIPANTES} vão responder.`);
 }
@@ -113,13 +109,13 @@ function valorAleatorio(atividade) {
 }
 
 export default function participante() {
-  const meuEmail = email(exec.vu.idInTest);
+  const eu = `participante ${exec.vu.idInTest}`;
 
   // 1. Entrar (o k6 guarda o cookie da sessão de cada participante).
-  let r = http.post(`${BASE}/api/sala/entrar`, JSON.stringify({ codigo: CODIGO, email: meuEmail }), json("entrar"));
+  let r = http.post(`${BASE}/api/sala/entrar`, JSON.stringify({ codigo: CODIGO }), json("entrar"));
   registrarServidor("entrar", r);
   if (!check(r, { "entrou na sala": (x) => x.status === 200 })) {
-    console.error(`${meuEmail} não entrou: ${r.status} ${r.body}`);
+    console.error(`${eu} não entrou: ${r.status} ${r.body}`);
     return;
   }
 
@@ -148,6 +144,6 @@ export default function participante() {
   );
   registrarServidor("responder", r);
   if (!check(r, { "resposta aceita": (x) => x.status === 200 })) {
-    console.error(`${meuEmail} não respondeu: ${r.status} ${r.body}`);
+    console.error(`${eu} não respondeu: ${r.status} ${r.body}`);
   }
 }

@@ -2,9 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { textoLimpo, UFS, uuidValido } from "@/lib/formatos";
-import { interpretarPlanilha, type LinhaPlanilha } from "@/lib/planilha";
 import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
 
@@ -104,7 +102,7 @@ export async function salvarEvento(
 }
 
 // ---------------------------------------------------------------
-// Código de acesso e inscrições
+// Código de acesso
 // ---------------------------------------------------------------
 
 export async function gerarOutroCodigo(eventoId: string): Promise<{ erro?: string }> {
@@ -116,158 +114,4 @@ export async function gerarOutroCodigo(eventoId: string): Promise<{ erro?: strin
 
   revalidatePath(`/painel/evento/${eventoId}`);
   return {};
-}
-
-export async function confirmarInscricao(eventoId: string, inscricaoId: string) {
-  const sessao = await exigirLogin();
-  if ("erro" in sessao) return;
-
-  await sessao.supabase
-    .from("inscricoes")
-    .update({ confirmada: true })
-    .eq("id", inscricaoId)
-    .eq("evento_id", eventoId);
-
-  revalidatePath(`/painel/evento/${eventoId}`);
-}
-
-// ---------------------------------------------------------------
-// Importar inscritos
-// ---------------------------------------------------------------
-
-export type SituacaoLinha = "nova" | "existente" | "inscrita" | "erro";
-export type LinhaPrevia = LinhaPlanilha & { situacao: SituacaoLinha };
-export type Previa = { erro?: string; linhas: LinhaPrevia[] };
-
-const LOTE = 100;
-
-function emLotes<T>(lista: T[]) {
-  const lotes: T[][] = [];
-  for (let i = 0; i < lista.length; i += LOTE) lotes.push(lista.slice(i, i + LOTE));
-  return lotes;
-}
-
-// Pessoas já cadastradas (por e-mail) e quais delas já estão inscritas no evento.
-async function consultarExistentes(supabase: SupabaseClient, eventoId: string, emails: string[]) {
-  const pessoaPorEmail = new Map<string, string>();
-  for (const lote of emLotes(emails)) {
-    const { data, error } = await supabase.from("pessoas").select("id, email").in("email", lote);
-    if (error) throw error;
-    for (const p of data) pessoaPorEmail.set(p.email, p.id);
-  }
-
-  const inscritas = new Set<string>();
-  for (const lote of emLotes([...pessoaPorEmail.values()])) {
-    const { data, error } = await supabase
-      .from("inscricoes")
-      .select("pessoa_id")
-      .eq("evento_id", eventoId)
-      .in("pessoa_id", lote);
-    if (error) throw error;
-    for (const i of data) inscritas.add(i.pessoa_id);
-  }
-
-  return { pessoaPorEmail, inscritas };
-}
-
-async function montarPrevia(supabase: SupabaseClient, eventoId: string, texto: string): Promise<Previa> {
-  const { erro, linhas } = interpretarPlanilha(texto);
-  if (erro) return { erro, linhas: [] };
-
-  const validas = linhas.filter((l) => !l.erro);
-  const { pessoaPorEmail, inscritas } = await consultarExistentes(
-    supabase,
-    eventoId,
-    validas.map((l) => l.email),
-  );
-
-  return {
-    linhas: linhas.map((l) => {
-      if (l.erro) return { ...l, situacao: "erro" };
-      const pessoaId = pessoaPorEmail.get(l.email);
-      if (!pessoaId) return { ...l, situacao: "nova" };
-      return { ...l, situacao: inscritas.has(pessoaId) ? "inscrita" : "existente" };
-    }),
-  };
-}
-
-async function conferirEvento(supabase: SupabaseClient, eventoId: string) {
-  if (!uuidValido(eventoId)) return false;
-  const { data } = await supabase.from("eventos").select("id").eq("id", eventoId).maybeSingle();
-  return Boolean(data);
-}
-
-export async function previaImportacao(eventoId: string, texto: string): Promise<Previa> {
-  const sessao = await exigirLogin();
-  if ("erro" in sessao) return { erro: sessao.erro, linhas: [] };
-  if (!(await conferirEvento(sessao.supabase, eventoId))) {
-    return { erro: "Evento não encontrado.", linhas: [] };
-  }
-
-  try {
-    return await montarPrevia(sessao.supabase, eventoId, texto);
-  } catch (e) {
-    console.error("previaImportacao:", e);
-    return { erro: SEM_CONEXAO, linhas: [] };
-  }
-}
-
-// Grava a partir do mesmo texto da prévia, conferindo tudo de novo no servidor.
-export async function gravarImportacao(
-  eventoId: string,
-  texto: string,
-): Promise<{ erro?: string; gravadas?: number }> {
-  const sessao = await exigirLogin();
-  if ("erro" in sessao) return { erro: sessao.erro };
-  const { supabase } = sessao;
-  if (!(await conferirEvento(supabase, eventoId))) return { erro: "Evento não encontrado." };
-
-  try {
-    const previa = await montarPrevia(supabase, eventoId, texto);
-    if (previa.erro) return { erro: previa.erro };
-
-    const aGravar = previa.linhas.filter((l) => l.situacao === "nova" || l.situacao === "existente");
-    if (aGravar.length === 0) return { gravadas: 0 };
-
-    // Pessoas novas. Se alguém cadastrou o mesmo e-mail nesse meio-tempo, é reaproveitado.
-    const novas = aGravar.filter((l) => l.situacao === "nova");
-    for (const lote of emLotes(novas)) {
-      const { error } = await supabase.from("pessoas").upsert(
-        lote.map((l) => ({ nome: l.nome, email: l.email, cargo: l.cargo || null })),
-        { onConflict: "email", ignoreDuplicates: true },
-      );
-      if (error) throw error;
-    }
-
-    const { pessoaPorEmail } = await consultarExistentes(
-      supabase,
-      eventoId,
-      aGravar.map((l) => l.email),
-    );
-
-    // Inscrições vindas da lista já nascem confirmadas.
-    const inscricoes = aGravar
-      .filter((l) => pessoaPorEmail.has(l.email))
-      .map((l) => ({
-        pessoa_id: pessoaPorEmail.get(l.email)!,
-        evento_id: eventoId,
-        agencia: l.agencia || null,
-        origem: "lista",
-        confirmada: true,
-      }));
-    for (const lote of emLotes(inscricoes)) {
-      const { error } = await supabase
-        .from("inscricoes")
-        .upsert(lote, { onConflict: "pessoa_id,evento_id", ignoreDuplicates: true });
-      if (error) throw error;
-    }
-
-    revalidatePath(`/painel/evento/${eventoId}`);
-    return { gravadas: inscricoes.length };
-  } catch (e) {
-    console.error("gravarImportacao:", e);
-    return {
-      erro: "A importação não terminou. Pode enviar de novo: quem já foi gravado não se repete.",
-    };
-  }
 }

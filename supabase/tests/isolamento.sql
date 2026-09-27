@@ -111,6 +111,7 @@ declare
 begin
   foreach funcao in array array[
     'public.sala_entrar(text, text, text, text)',
+    'public.sala_entrar_codigo(text, text, text)',
     'public.sala_estado(text)',
     'public.sala_responder(text, uuid, jsonb)',
     'public.normalizar_resposta(text, jsonb, jsonb)'
@@ -247,6 +248,68 @@ begin
     raise exception 'FALHOU: visitante sem login pode executar função de moderação ou de evento';
   end if;
 end $$;
+
+-- Entrada só com o código (0022), como o servidor faz.
+do $$
+declare
+  codigo_b text;
+  r jsonb;
+begin
+  select codigo_acesso into codigo_b from public.eventos where id = '00000000-0000-4000-c000-00000000000b';
+
+  r := public.sala_entrar_codigo(codigo_b, 'ip-anonimo', repeat('c', 64));
+  if r ->> 'resultado' <> 'ok' then
+    raise exception 'FALHOU: entrada só com o código não entrou (%)', r;
+  end if;
+  if (select count(*) from public.inscricoes i
+        join public.sessoes_participante s on s.inscricao_id = i.id
+       where i.evento_id = '00000000-0000-4000-c000-00000000000b'
+         and i.origem = 'anonima' and i.pessoa_id is null
+         and s.token_hash = repeat('c', 64)) <> 1 then
+    raise exception 'FALHOU: entrada só com o código não criou participante anônimo com sessão';
+  end if;
+  if public.sala_estado(repeat('c', 64)) -> 'participante' ->> 'inscricaoId' is null then
+    raise exception 'FALHOU: sala_estado não reconhece participante anônimo';
+  end if;
+
+  if public.sala_entrar_codigo('ZZZZ', 'ip-anonimo', repeat('d', 64)) ->> 'resultado' <> 'nao_confere' then
+    raise exception 'FALHOU: código inexistente não foi recusado';
+  end if;
+
+  -- Passou das 23h59 do último dia: o código não vale mais.
+  update public.eventos set data_inicio = '2020-01-01', data_fim = '2020-01-01'
+   where id = '00000000-0000-4000-c000-00000000000b';
+  if public.sala_entrar_codigo(codigo_b, 'ip-anonimo', repeat('d', 64)) ->> 'resultado' <> 'terminou' then
+    raise exception 'FALHOU: código valeu depois do último dia do evento';
+  end if;
+  update public.eventos set data_inicio = '2099-01-10', data_fim = '2099-01-11'
+   where id = '00000000-0000-4000-c000-00000000000b';
+
+  -- Anônima sem pessoa, e só anônima: o banco confere.
+  begin
+    insert into public.inscricoes (evento_id, pessoa_id, origem)
+    values ('00000000-0000-4000-c000-00000000000b', null, 'lista');
+    raise exception 'FALHOU: aceitou inscrição de lista sem pessoa';
+  exception when check_violation then
+    null;
+  end;
+
+  -- Teto de 150 participantes por evento.
+  insert into public.inscricoes (evento_id, pessoa_id, origem)
+  select '00000000-0000-4000-c000-00000000000b', null, 'anonima' from generate_series(1, 149);
+  if public.sala_entrar_codigo(codigo_b, 'ip-anonimo', repeat('d', 64)) ->> 'resultado' <> 'lotado' then
+    raise exception 'FALHOU: entrou além do teto de participantes';
+  end if;
+
+  -- Limpa: os testes seguintes contam as inscrições do B.
+  delete from public.inscricoes where origem = 'anonima';
+end $$;
+
+-- Blocos: um em cada evento.
+insert into public.blocos (id, evento_id, ordem, titulo)
+values
+  ('00000000-0000-4000-9000-0000000000a1', '00000000-0000-4000-c000-00000000000a', 1, 'Abertura do A'),
+  ('00000000-0000-4000-9000-0000000000b1', '00000000-0000-4000-c000-00000000000b', 1, 'Abertura do B');
 
 -- ---------------------------------------------------------------
 -- Instrutor A
@@ -476,6 +539,48 @@ begin
   insert into public.palavras_ocultas (atividade_id, chave)
   values ('00000000-0000-4000-e000-0000000000a1', 'prazo');
 
+  -- Blocos: vê e mexe nos do próprio evento, não nos do B.
+  if (select count(*) from public.blocos where evento_id = '00000000-0000-4000-c000-00000000000a') <> 1 then
+    raise exception 'FALHOU: instrutor A não vê os blocos do próprio evento';
+  end if;
+  if (select count(*) from public.blocos where evento_id = '00000000-0000-4000-c000-00000000000b') <> 0 then
+    raise exception 'FALHOU: instrutor A vê bloco do evento do B';
+  end if;
+  insert into public.blocos (evento_id, ordem, titulo)
+  values ('00000000-0000-4000-c000-00000000000a', 2, 'Caso 1 do A');
+  begin
+    insert into public.blocos (evento_id, ordem, titulo)
+    values ('00000000-0000-4000-c000-00000000000b', 2, 'Intruso');
+    raise exception 'FALHOU: instrutor A criou bloco no evento do B';
+  exception when insufficient_privilege then
+    null;
+  end;
+  update public.blocos set titulo = 'Alterado por A' where id = '00000000-0000-4000-9000-0000000000b1';
+  get diagnostics linhas = row_count;
+  if linhas <> 0 then
+    raise exception 'FALHOU: instrutor A alterou bloco do B';
+  end if;
+  begin
+    perform public.mover_bloco('00000000-0000-4000-9000-0000000000b1', 1);
+    raise exception 'FALHOU: instrutor A moveu bloco do B';
+  exception when no_data_found then
+    null;
+  end;
+  -- Atividade do A não entra em bloco do B (o banco confere o evento do bloco).
+  begin
+    update public.atividades set bloco_id = '00000000-0000-4000-9000-0000000000b1'
+     where id = '00000000-0000-4000-e000-0000000000a1';
+    raise exception 'FALHOU: atividade do A entrou em bloco do evento do B';
+  exception when foreign_key_violation then
+    null;
+  end;
+  update public.atividades set bloco_id = '00000000-0000-4000-9000-0000000000a1'
+   where id = '00000000-0000-4000-e000-0000000000a1';
+  get diagnostics linhas = row_count;
+  if linhas <> 1 then
+    raise exception 'FALHOU: instrutor A não pôs atividade no próprio bloco';
+  end if;
+
   -- Não encerra o evento do B.
   begin
     perform public.encerrar_evento('00000000-0000-4000-c000-00000000000b');
@@ -647,6 +752,18 @@ begin
   begin
     perform public.sala_estado(repeat('a', 64));
     raise exception 'FALHOU: visitante sem login executa sala_estado';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform 1 from public.blocos;
+    raise exception 'FALHOU: visitante sem login lê blocos';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.sala_entrar_codigo('ABCD', 'ip', repeat('e', 64));
+    raise exception 'FALHOU: visitante sem login executa sala_entrar_codigo';
   exception when insufficient_privilege then
     null;
   end;

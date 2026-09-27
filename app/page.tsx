@@ -6,12 +6,19 @@ import { participanteAtual } from "@/utils/participante";
 import FormularioEntrada from "./entrada/formulario";
 
 export default async function Entrada({ searchParams }: PageProps<"/">) {
-  // Volta ao mesmo aparelho: com sessão válida, vai direto para a sala.
-  const { participante } = await participanteAtual();
-  if (participante && participante.evento.estado !== "encerrado") redirect("/sala");
-
   const { c } = await searchParams;
   const codigoInicial = typeof c === "string" ? normalizarCodigo(c).slice(0, 4) : "";
+
+  // Volta ao mesmo aparelho: com sessão válida, vai direto para a sala — a não ser
+  // que o QR code seja de OUTRO evento; aí mostra a entrada para esse outro.
+  const { participante } = await participanteAtual();
+  if (
+    participante &&
+    participante.evento.estado !== "encerrado" &&
+    (!codigoInicial || codigoInicial === participante.evento.codigo_acesso)
+  ) {
+    redirect("/sala");
+  }
 
   return (
     <main className="flex flex-1 flex-col items-center px-6 py-10 sm:justify-center">
@@ -19,7 +26,7 @@ export default async function Entrada({ searchParams }: PageProps<"/">) {
       <div className="mt-8 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <h1 className="text-xl font-semibold">Entrar no evento</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Suas respostas aparecem para a turma sem o seu nome.
+          Digite o código que aparece no telão. Não precisa de e-mail nem de nome: suas respostas são anônimas.
         </p>
         <div className="mt-6">
           <FormularioEntrada codigoInicial={codigoInicial} />

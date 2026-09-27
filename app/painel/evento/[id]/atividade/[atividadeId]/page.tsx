@@ -13,6 +13,7 @@ type Atividade = {
   enunciado: string;
   config: ConfigAtividade;
   estado: EstadoAtividade;
+  bloco_id: string | null;
   eventos: { nome_turma: string } | null;
 };
 
@@ -27,13 +28,16 @@ export default async function EditarAtividade({
   if (!user) redirect("/login");
 
   const supabase = await criarClienteServidor();
-  const atividade = await supabase
-    .from("atividades")
-    .select("tipo, enunciado, config, estado, eventos(nome_turma)")
-    .eq("id", atividadeId)
-    .eq("evento_id", id)
-    .maybeSingle<Atividade>();
-  if (atividade.error) return <AvisoErroConexao />;
+  const [atividade, blocos] = await Promise.all([
+    supabase
+      .from("atividades")
+      .select("tipo, enunciado, config, estado, bloco_id, eventos(nome_turma)")
+      .eq("id", atividadeId)
+      .eq("evento_id", id)
+      .maybeSingle<Atividade>(),
+    supabase.from("blocos").select("id, ordem, titulo").eq("evento_id", id).order("ordem").order("id"),
+  ]);
+  if (atividade.error || blocos.error) return <AvisoErroConexao />;
   if (!atividade.data) notFound();
   const a = atividade.data;
 
@@ -47,7 +51,13 @@ export default async function EditarAtividade({
         <h1 className="mt-4 text-2xl font-semibold">Editar atividade</h1>
         <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
           {a.estado === "fechada" ? (
-            <FormularioAtividade eventoId={id} atividadeId={atividadeId} atividade={a} />
+            <FormularioAtividade
+              eventoId={id}
+              atividadeId={atividadeId}
+              atividade={a}
+              blocos={blocos.data}
+              blocoInicial={a.bloco_id}
+            />
           ) : (
             <p className="text-slate-600">
               Esta atividade já foi aberta e não pode mais ser editada, porque as respostas estão ligadas às opções.

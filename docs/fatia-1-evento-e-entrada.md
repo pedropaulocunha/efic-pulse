@@ -1,5 +1,7 @@
 # Fatia 1 — Evento e entrada
 
+> **Atualizado em 27/09/2026:** a entrada por e-mail, o "Não estou na lista" e a importação de inscritos foram substituídos pela entrada só com o código. Veja `docs/ajuste-blocos-e-entrada.md`. O texto abaixo fica como registro.
+
 Objetivo: você cria um evento no painel, importa a lista de inscritos, e o participante entra pelo celular com o código do evento e o e-mail, ou pelo QR code. Ao entrar, ele vê uma tela de espera. As atividades chegam na fatia 2.
 
 Pré-requisito: fatia 0 concluída e publicada.

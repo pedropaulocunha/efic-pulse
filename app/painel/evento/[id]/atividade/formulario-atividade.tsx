@@ -20,6 +20,7 @@ import {
   type ConfigOrdenar,
   type TipoAtividade,
 } from "@/lib/atividades";
+import type { Bloco } from "@/lib/blocos";
 import { salvarAtividade, type EstadoFormularioAtividade } from "../../acoes-atividades";
 
 const inicial: EstadoFormularioAtividade = {};
@@ -51,15 +52,20 @@ export default function FormularioAtividade({
   eventoId,
   atividadeId,
   atividade,
+  blocos,
+  blocoInicial,
 }: {
   eventoId: string;
   atividadeId: string | null;
   atividade?: { tipo: TipoAtividade; enunciado: string; config: ConfigAtividade };
+  blocos: Bloco[];
+  blocoInicial: string | null;
 }) {
   const [estado, acao, salvando] = useActionState(salvarAtividade.bind(null, eventoId, atividadeId), inicial);
 
   const [tipo, setTipo] = useState<TipoAtividade>(atividade?.tipo ?? "multipla");
   const [enunciado, setEnunciado] = useState(atividade?.enunciado ?? "");
+  const [bloco, setBloco] = useState(blocoInicial ?? "");
 
   const cMultipla = atividade?.tipo === "multipla" ? (atividade.config as ConfigMultipla) : null;
   const [opcoes, setOpcoes] = useState<string[]>(cMultipla?.opcoes ?? ["", "", ""]);
@@ -131,6 +137,19 @@ export default function FormularioAtividade({
             ))}
           </div>
         </fieldset>
+      )}
+
+      {blocos.length > 0 && (
+        <Campo rotulo="Bloco" dica="Grupo de perguntas do evento, como Abertura ou Estudo de caso 1.">
+          <select name="bloco" value={bloco} onChange={(e) => setBloco(e.target.value)} className={estiloCampo}>
+            <option value="">Sem bloco</option>
+            {blocos.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.titulo}
+              </option>
+            ))}
+          </select>
+        </Campo>
       )}
 
       <Campo rotulo="Pergunta" dica={exemplos[tipo]}>

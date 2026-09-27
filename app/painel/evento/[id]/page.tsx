@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { CabecalhoPainel } from "@/components/cabecalho-painel";
 import { AvisoErroConexao, estiloBotaoCompacto, estiloBotaoSecundario } from "@/components/ui";
-import { formatarPeriodo, rotuloEstado, uuidValido, type EstadoEvento } from "@/lib/formatos";
+import { agruparPorBloco, type Bloco } from "@/lib/blocos";
+import { formatarData, formatarPeriodo, rotuloEstado, uuidValido, type EstadoEvento } from "@/lib/formatos";
 import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
 import {
@@ -18,12 +19,19 @@ import {
   type EstadoAtividade,
   type TipoAtividade,
 } from "@/lib/atividades";
-import { confirmarInscricao } from "../acoes";
 import BotaoNovoCodigo from "./botao-novo-codigo";
-import { BotaoCopiarLink, BotoesAtividade, BotaoEstadoEvento } from "./botoes-evento";
+import {
+  BotaoCopiarLink,
+  BotaoEstadoEvento,
+  BotaoNovoBloco,
+  BotoesAtividade,
+  CabecalhoBloco,
+} from "./botoes-evento";
 
 type Atividade = {
   id: string;
+  ordem: number;
+  bloco_id: string | null;
   tipo: TipoAtividade;
   enunciado: string;
   config: ConfigAtividade;
@@ -84,14 +92,6 @@ type Evento = {
   cooperativas: { nome: string; uf: string } | null;
 };
 
-type Inscrito = {
-  id: string;
-  agencia: string | null;
-  origem: "lista" | "cadastro_sala";
-  confirmada: boolean;
-  pessoas: { nome: string; email: string; cargo: string | null } | null;
-};
-
 export default async function PaginaEvento({ params }: PageProps<"/painel/evento/[id]">) {
   const { id } = await params;
   if (!uuidValido(id)) notFound();
@@ -101,7 +101,7 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
   if (!user) redirect("/login");
 
   const supabase = await criarClienteServidor();
-  const [evento, inscricoes, atividades, perfil] = await Promise.all([
+  const [evento, participantes, atividades, blocos, perfil] = await Promise.all([
     supabase
       .from("eventos")
       .select(
@@ -109,33 +109,29 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
       )
       .eq("id", id)
       .maybeSingle<Evento>(),
-    supabase
-      .from("inscricoes")
-      .select("id, agencia, origem, confirmada, pessoas(nome, email, cargo)")
-      .eq("evento_id", id)
-      .returns<Inscrito[]>(),
+    supabase.from("inscricoes").select("id", { count: "exact", head: true }).eq("evento_id", id),
     supabase
       .from("atividades")
-      .select("id, tipo, enunciado, config, estado, rodada_atual")
+      .select("id, ordem, bloco_id, tipo, enunciado, config, estado, rodada_atual")
       .eq("evento_id", id)
-      .order("ordem")
-      .order("id")
       .returns<Atividade[]>(),
+    supabase.from("blocos").select("id, ordem, titulo").eq("evento_id", id).returns<Bloco[]>(),
     supabase.from("perfis").select("papel").eq("id", user.id).maybeSingle(),
   ]);
-  if (evento.error || inscricoes.error || atividades.error || perfil.error) return <AvisoErroConexao />;
+  if (evento.error || participantes.error || atividades.error || blocos.error || perfil.error) {
+    return <AvisoErroConexao />;
+  }
   const ehAdmin = perfil.data?.papel === "admin";
   if (!evento.data) notFound();
 
   const e = evento.data;
-  // Primeiro os que se cadastraram na sala e esperam confirmação; depois, por nome.
-  const inscritos = [...inscricoes.data].sort((a, b) => {
-    const pendenteA = a.origem === "cadastro_sala" && !a.confirmada ? 0 : 1;
-    const pendenteB = b.origem === "cadastro_sala" && !b.confirmada ? 0 : 1;
-    if (pendenteA !== pendenteB) return pendenteA - pendenteB;
-    return (a.pessoas?.nome ?? "").localeCompare(b.pessoas?.nome ?? "", "pt-BR");
-  });
-  const pendentes = inscritos.filter((i) => i.origem === "cadastro_sala" && !i.confirmada).length;
+  const grupos = agruparPorBloco(atividades.data, blocos.data);
+  const totalAtividades = atividades.data.length;
+  const encerrado = e.estado === "encerrado";
+  const nParticipantes = participantes.count ?? 0;
+
+  // Numeração corrida (1, 2, 3...) em todos os blocos.
+  const numero = new Map(grupos.flatMap((g) => g.atividades).map((a, i) => [a.id, i + 1]));
 
   return (
     <div className="flex flex-1 flex-col">
@@ -166,7 +162,7 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
             <Link href={`/painel/evento/${e.id}/editar`} className={estiloBotaoSecundario}>
               Editar evento
             </Link>
-            <BotaoEstadoEvento eventoId={e.id} encerrado={e.estado === "encerrado"} podeReabrir={ehAdmin} />
+            <BotaoEstadoEvento eventoId={e.id} encerrado={encerrado} podeReabrir={ehAdmin} />
           </div>
         </div>
 
@@ -175,6 +171,13 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
             <p className="text-sm font-medium text-slate-500">Código de acesso dos participantes</p>
             <p className="mt-1 font-mono text-5xl font-semibold tracking-[0.2em] text-slate-900">
               {e.codigo_acesso}
+            </p>
+            <p className="mt-2 text-sm text-slate-500">
+              {encerrado
+                ? "Evento encerrado: o código não vale mais."
+                : `Entrada só com o código, sem e-mail. Vale até 23h59 de ${formatarData(e.data_fim)}.`}
+              {" · "}
+              {nParticipantes === 1 ? "1 participante entrou" : `${nParticipantes} participantes entraram`}
             </p>
           </div>
           <div className="flex flex-wrap items-start gap-3">
@@ -198,109 +201,84 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
 
         <section id="atividades" className="mt-10 scroll-mt-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-medium text-slate-700">Atividades ({atividades.data.length})</h2>
-            <Link href={`/painel/evento/${e.id}/atividade/nova`} className={estiloBotaoSecundario}>
-              Nova atividade
-            </Link>
+            <h2 className="text-lg font-medium text-slate-700">Atividades ({totalAtividades})</h2>
+            <div className="flex flex-wrap items-start gap-3">
+              <BotaoNovoBloco eventoId={e.id} />
+              <Link href={`/painel/evento/${e.id}/atividade/nova`} className={estiloBotaoSecundario}>
+                Nova atividade
+              </Link>
+            </div>
           </div>
 
-          {atividades.data.length === 0 ? (
+          {grupos.length === 0 ? (
             <p className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-slate-500">
-              Nenhuma atividade ainda. Crie as perguntas que você vai abrir na sala.
+              Nenhuma atividade ainda. Crie as perguntas que você vai abrir na sala. Para separar em partes
+              (abertura, estudos de caso, encerramento), crie blocos.
             </p>
           ) : (
-            <ol className="mt-4 divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              {atividades.data.map((a, i) => (
-                <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">
-                      <span className="mr-2 text-slate-400">{i + 1}.</span>
-                      {a.enunciado}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {rotuloTipo[a.tipo]} · {resumoConfig(a)}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-3 py-1 text-sm ${corEstadoAtividade[a.estado]}`}>
-                      {rotuloEstadoAtividade[a.estado]}
-                      {a.rodada_atual > 1 ? ` · rodada ${a.rodada_atual}` : ""}
-                    </span>
-                    {a.estado === "fechada" && (
-                      <Link
-                        href={`/painel/evento/${e.id}/atividade/${a.id}`}
-                        className="inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-slate-600 hover:bg-slate-50"
-                      >
-                        Editar
-                      </Link>
-                    )}
-                    <BotoesAtividade
+            <div className="mt-4 space-y-6">
+              {grupos.map((g, gi) => (
+                <div key={g.bloco?.id ?? "sem-bloco"}>
+                  {g.bloco ? (
+                    <CabecalhoBloco
                       eventoId={e.id}
-                      atividadeId={a.id}
-                      primeira={i === 0}
-                      ultima={i === atividades.data.length - 1}
-                      podeExcluir={a.estado !== "aberta"}
+                      bloco={g.bloco}
+                      quantidade={g.atividades.length}
+                      primeiro={gi === 0 || (gi === 1 && grupos[0].bloco === null)}
+                      ultimo={gi === grupos.length - 1}
                     />
-                  </div>
-                </li>
+                  ) : (
+                    blocos.data.length > 0 && (
+                      <p className="mb-2 text-sm font-medium uppercase tracking-wide text-slate-400">Sem bloco</p>
+                    )
+                  )}
+
+                  {g.atividades.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-6 text-center text-sm text-slate-500">
+                      Bloco vazio. Crie uma atividade nele ou traga uma com as setas ↑ ↓.
+                    </p>
+                  ) : (
+                    <ol className="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                      {g.atividades.map((a, i) => (
+                          <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium">
+                                <span className="mr-2 text-slate-400">{numero.get(a.id)}.</span>
+                                {a.enunciado}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-500">
+                                {rotuloTipo[a.tipo]} · {resumoConfig(a)}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`rounded-full px-3 py-1 text-sm ${corEstadoAtividade[a.estado]}`}>
+                                {rotuloEstadoAtividade[a.estado]}
+                                {a.rodada_atual > 1 ? ` · rodada ${a.rodada_atual}` : ""}
+                              </span>
+                              {a.estado === "fechada" && (
+                                <Link
+                                  href={`/painel/evento/${e.id}/atividade/${a.id}`}
+                                  className="inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-slate-600 hover:bg-slate-50"
+                                >
+                                  Editar
+                                </Link>
+                              )}
+                              {/* As setas atravessam blocos: na ponta, a atividade passa para o bloco vizinho. */}
+                              <BotoesAtividade
+                                eventoId={e.id}
+                                atividadeId={a.id}
+                                primeira={g.bloco === null && i === 0}
+                                ultima={gi === grupos.length - 1 && i === g.atividades.length - 1}
+                                podeExcluir={a.estado !== "aberta"}
+                              />
+                            </div>
+                          </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
               ))}
-            </ol>
-          )}
-        </section>
-
-        <section className="mt-10">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-medium text-slate-700">
-              Inscritos ({inscritos.length})
-              {pendentes > 0 && (
-                <span className="ml-2 rounded-full bg-amber-100 px-3 py-1 text-sm font-normal text-amber-800">
-                  {pendentes} para confirmar
-                </span>
-              )}
-            </h2>
-            <Link href={`/painel/evento/${e.id}/importar`} className={estiloBotaoSecundario}>
-              Importar inscritos
-            </Link>
-          </div>
-
-          {inscritos.length === 0 ? (
-            <p className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-slate-500">
-              Nenhum inscrito ainda. Importe a planilha da cooperativa.
-            </p>
-          ) : (
-            <ul className="mt-4 divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              {inscritos.map((i) => {
-                const naoInscrito = i.origem === "cadastro_sala" && !i.confirmada;
-                return (
-                  <li key={i.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
-                    <div className="min-w-0">
-                      <p className="font-medium">
-                        {i.pessoas?.nome}
-                        {naoInscrito && (
-                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                            não inscrito
-                          </span>
-                        )}
-                      </p>
-                      <p className="truncate text-sm text-slate-500">
-                        {i.pessoas?.email}
-                        {i.pessoas?.cargo ? ` · ${i.pessoas.cargo}` : ""}
-                        {i.agencia ? ` · Agência ${i.agencia}` : ""}
-                        {" · "}
-                        {i.origem === "lista" ? "Lista" : "Cadastro na sala"}
-                      </p>
-                    </div>
-                    {naoInscrito && (
-                      <form action={confirmarInscricao.bind(null, e.id, i.id)}>
-                        <button type="submit" className={estiloBotaoSecundario}>
-                          Confirmar
-                        </button>
-                      </form>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            </div>
           )}
         </section>
       </main>

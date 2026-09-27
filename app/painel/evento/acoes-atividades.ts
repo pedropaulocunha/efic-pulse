@@ -26,6 +26,17 @@ async function exigirLogin() {
 
 export type EstadoFormularioAtividade = { erro?: string };
 
+type Cliente = Awaited<ReturnType<typeof criarClienteServidor>>;
+
+// Posição no fim do bloco (a ordem vale dentro de cada bloco). undefined = sem conexão.
+async function proximaOrdem(supabase: Cliente, eventoId: string, blocoId: string | null) {
+  let consulta = supabase.from("atividades").select("ordem").eq("evento_id", eventoId);
+  consulta = blocoId ? consulta.eq("bloco_id", blocoId) : consulta.is("bloco_id", null);
+  const ultima = await consulta.order("ordem", { ascending: false }).limit(1).maybeSingle();
+  if (ultima.error) return undefined;
+  return (ultima.data?.ordem ?? 0) + 1;
+}
+
 export async function salvarAtividade(
   eventoId: string,
   atividadeId: string | null,
@@ -57,34 +68,43 @@ export async function salvarAtividade(
   });
   if ("erro" in validacao) return { erro: validacao.erro };
 
+  // Bloco escolhido (vazio = sem bloco). O banco confere que é do mesmo evento.
+  const blocoBruto = campo("bloco");
+  if (blocoBruto && !uuidValido(blocoBruto)) return { erro: "Bloco inválido." };
+  const blocoId = blocoBruto || null;
+
   if (atividadeId) {
     // Só dá para editar antes de abrir: depois disso já há respostas ligadas às opções.
-    const atual = await supabase.from("atividades").select("estado").eq("id", atividadeId).maybeSingle();
+    const atual = await supabase
+      .from("atividades")
+      .select("estado, bloco_id")
+      .eq("id", atividadeId)
+      .maybeSingle();
     if (atual.error) return { erro: SEM_CONEXAO };
     if (!atual.data) return { erro: "Atividade não encontrada." };
     if (atual.data.estado !== "fechada") return { erro: "Esta atividade já foi aberta e não pode mais ser editada." };
 
+    // Mudou de bloco: vai para o fim do bloco novo.
+    const mudouDeBloco = atual.data.bloco_id !== blocoId;
+    const ordem = mudouDeBloco ? await proximaOrdem(supabase, eventoId, blocoId) : null;
+    if (ordem === undefined) return { erro: SEM_CONEXAO };
+
     const alterada = await supabase
       .from("atividades")
-      .update({ tipo, enunciado, config: validacao.config })
+      .update({ tipo, enunciado, config: validacao.config, ...(ordem ? { bloco_id: blocoId, ordem } : {}) })
       .eq("id", atividadeId)
       .eq("estado", "fechada")
       .select("id");
     if (alterada.error) return { erro: "Não foi possível salvar a atividade. Tente de novo." };
     if (alterada.data.length === 0) return { erro: "Esta atividade já foi aberta e não pode mais ser editada." };
   } else {
-    const ultima = await supabase
-      .from("atividades")
-      .select("ordem")
-      .eq("evento_id", eventoId)
-      .order("ordem", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (ultima.error) return { erro: SEM_CONEXAO };
+    const ordem = await proximaOrdem(supabase, eventoId, blocoId);
+    if (ordem === undefined) return { erro: SEM_CONEXAO };
 
     const criada = await supabase.from("atividades").insert({
       evento_id: eventoId,
-      ordem: (ultima.data?.ordem ?? 0) + 1,
+      bloco_id: blocoId,
+      ordem,
       tipo,
       enunciado,
       config: validacao.config,
@@ -119,6 +139,77 @@ export async function moverAtividade(eventoId: string, atividadeId: string, dire
   const sessao = await exigirLogin();
   if ("erro" in sessao) return;
   await sessao.supabase.rpc("mover_atividade", { atividade: atividadeId, direcao });
+  revalidatePath(`/painel/evento/${eventoId}`);
+}
+
+// ---------------------------------------------------------------
+// Blocos (grupos de atividades)
+// ---------------------------------------------------------------
+
+export async function criarBloco(eventoId: string, tituloBruto: string): Promise<{ erro?: string }> {
+  if (!uuidValido(eventoId)) return { erro: "Evento inválido." };
+  const titulo = textoLimpo(tituloBruto, 120);
+  if (!titulo) return { erro: "Dê um nome ao bloco." };
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+
+  const ultimo = await sessao.supabase
+    .from("blocos")
+    .select("ordem")
+    .eq("evento_id", eventoId)
+    .order("ordem", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (ultimo.error) return { erro: SEM_CONEXAO };
+
+  const criado = await sessao.supabase
+    .from("blocos")
+    .insert({ evento_id: eventoId, titulo, ordem: (ultimo.data?.ordem ?? 0) + 1 });
+  if (criado.error) return { erro: "Não foi possível criar o bloco. Tente de novo." };
+
+  revalidatePath(`/painel/evento/${eventoId}`);
+  return {};
+}
+
+export async function renomearBloco(eventoId: string, blocoId: string, tituloBruto: string): Promise<{ erro?: string }> {
+  const titulo = textoLimpo(tituloBruto, 120);
+  if (!titulo) return { erro: "Dê um nome ao bloco." };
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+
+  const alterado = await sessao.supabase
+    .from("blocos")
+    .update({ titulo })
+    .eq("id", blocoId)
+    .eq("evento_id", eventoId)
+    .select("id");
+  if (alterado.error || alterado.data.length === 0) return { erro: "Não foi possível renomear. Tente de novo." };
+
+  revalidatePath(`/painel/evento/${eventoId}`);
+  return {};
+}
+
+// As atividades do bloco não são apagadas: ficam sem bloco (0023).
+export async function excluirBloco(eventoId: string, blocoId: string): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+
+  const apagado = await sessao.supabase
+    .from("blocos")
+    .delete()
+    .eq("id", blocoId)
+    .eq("evento_id", eventoId)
+    .select("id");
+  if (apagado.error || apagado.data.length === 0) return { erro: "Não foi possível excluir. Tente de novo." };
+
+  revalidatePath(`/painel/evento/${eventoId}`);
+  return {};
+}
+
+export async function moverBloco(eventoId: string, blocoId: string, direcao: -1 | 1) {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return;
+  await sessao.supabase.rpc("mover_bloco", { bloco: blocoId, direcao });
   revalidatePath(`/painel/evento/${eventoId}`);
 }
 
