@@ -16,6 +16,17 @@ import type { EstadoProjecao, ResultadoAgregado } from "@/utils/projecao";
 
 type AtividadeTelao = NonNullable<EstadoProjecao["atividade"]>;
 
+// "40 respostas", "1 resposta · rodada 2", "5 no mural".
+function textoContagem(resultado: ResultadoAgregado, rodada: number) {
+  const base =
+    resultado.tipo === "aberta"
+      ? `${resultado.aprovadas.length} no mural`
+      : resultado.total === 1
+        ? "1 resposta"
+        : `${resultado.total} respostas`;
+  return rodada > 1 ? `${base} · rodada ${rodada}` : base;
+}
+
 // O gráfico de cada tipo; a partir da rodada 2, comparado com a rodada 1.
 function Resultado({ atividade }: { atividade: AtividadeTelao }) {
   const r = atividade.resultado as ResultadoAgregado;
@@ -97,17 +108,11 @@ export default function Telao({
           <div className="mt-[4vh] flex min-h-0 flex-1 flex-col">
             {atividade.resultado ? (
               <div className="my-auto w-full">
-                <p className="mb-[3vh] flex flex-wrap items-center gap-x-[2vw] text-[1.8vw] text-slate-500">
-                  <span>
-                    {atividade.resultado.tipo === "aberta"
-                      ? `${atividade.resultado.aprovadas.length} no mural`
-                      : atividade.resultado.total === 1
-                        ? "1 resposta"
-                        : `${atividade.resultado.total} respostas`}
-                    {atividade.rodada > 1 ? ` · rodada ${atividade.rodada}` : ""}
-                  </span>
-                  {atividade.resultadoRodada1 && <LegendaRodadas rodada={atividade.rodada} />}
-                </p>
+                {atividade.resultadoRodada1 && (
+                  <p className="mb-[3vh]">
+                    <LegendaRodadas rodada={atividade.rodada} />
+                  </p>
+                )}
                 <Resultado atividade={atividade} />
               </div>
             ) : (
@@ -132,17 +137,17 @@ export default function Telao({
         </div>
       )}
 
-      {/* Rodapé fixo: código à esquerda, logo à direita, na mesma altura e discretos.
+      {/* Rodapé fixo, discreto e na mesma altura: código à esquerda, quantidade de
+          respostas no centro (quando o resultado está no telão) e logo à direita.
           Na tela de espera o código já está grande no centro, então não se repete. */}
-      <div className="absolute inset-x-[4vw] bottom-[4vh] flex items-center justify-between">
-        {atividade ? (
-          <span className="font-mono text-[1.2vw] font-semibold leading-none tracking-[0.12em] text-slate-900">
-            {evento.codigoAcesso}
-          </span>
-        ) : (
-          <span />
-        )}
-        <Marca className="text-[1.2vw]" />
+      <div className="absolute inset-x-[4vw] bottom-[4vh] grid grid-cols-3 items-center text-[1.2vw] leading-none">
+        <span className="justify-self-start font-mono font-semibold tracking-[0.12em] text-slate-900">
+          {atividade ? evento.codigoAcesso : ""}
+        </span>
+        <span className="justify-self-center whitespace-nowrap text-slate-500">
+          {atividade?.resultado ? textoContagem(atividade.resultado, atividade.rodada) : ""}
+        </span>
+        <Marca className="justify-self-end" />
       </div>
 
       {semConexao && (
