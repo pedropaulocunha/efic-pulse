@@ -90,10 +90,10 @@ Antes de levar à primeira turma:
 - [x] A referência da escala só aparece quando revelada.
 - [x] Um celular com a tela bloqueada durante a abertura mostra a atividade certa ao ser desbloqueado.
 - [x] O link da projeção abre sem login e não comanda nada.
-- [ ] 40 participantes simulados respondem sem erro, com as funções abaixo de 1 segundo na tabela da Vercel.
-  - Sem erro: sim (k6, 160 de 160 verificações). Tempo dentro do servidor (k6, p95): responder 0,34 s, estado 0,81 s, **entrar 1,31 s** com os 40 entrando no mesmo instante.
-  - Causa: o Supabase está no tamanho Micro, que atende em torno de 40 pedidos por segundo. O código já faz um pedido só por ação (migração 0013).
-  - **Pendente, decidido pelo Pedro:** passar o Supabase para Small antes da primeira turma real e repetir o k6.
+- [x] 40 participantes simulados respondem sem erro, com as funções abaixo de 1 segundo na tabela da Vercel.
+  - 26/09/2026: sem erro, mas entrar levava 1,31 s (p95) com os 40 no mesmo instante; o Supabase Micro atende em torno de 40 pedidos por segundo.
+  - 27/09/2026, depois da fatia 3: k6 com 2223 de 2223 verificações; dentro do servidor (p95) entrar 0,79 s, estado 0,61 s, responder 0,17 s. Todos abaixo de 1 s, ainda no Micro.
+  - Upgrade para Small: não é mais obrigatório; fica como folga opcional, decisão do Pedro.
 - [x] O teste de isolamento continua passando.
 
 ## Fora desta fatia

@@ -55,8 +55,9 @@ Pré-requisito: fatia 2 concluída e publicada.
 - [ ] Uma palavra ocultada no controle some do telão em até 2 segundos.
 - [ ] Uma resposta aberta só aparece no telão depois de aprovada.
 - [ ] Encerrar o evento faz o celular mostrar "Este evento já terminou."
-- [ ] O teste de isolamento continua passando, com os casos novos.
-- [ ] O teste de carga com 40 participantes continua sem erro.
+- [x] O teste de isolamento continua passando, com os casos novos.
+- [x] O teste de carga com 40 participantes continua sem erro.
+  - k6 em 27/09/2026: 2223 de 2223 verificações; dentro do servidor (p95) entrar 0,79 s, estado 0,61 s, responder 0,17 s.
 
 ## Fora desta fatia
 
