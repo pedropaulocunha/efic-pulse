@@ -1,10 +1,19 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ConfigAtividade, EstadoAtividade, TipoAtividade } from "@/lib/atividades";
+import {
+  TIPOS_COM_REFERENCIA,
+  TIPOS_COM_RODADAS,
+  type ConfigAtividade,
+  type EstadoAtividade,
+  type TipoAtividade,
+} from "@/lib/atividades";
+import type { EstadoProjecao, ResultadoAgregado } from "@/utils/projecao";
 
 // O que o controle do instrutor mostra. Usa o login do instrutor: as políticas
 // garantem que ele só vê os próprios eventos. Das respostas, só o total (agregado)
 // e, para moderar, as palavras da nuvem e os textos das abertas — nunca quem escreveu.
+// A atividade selecionada vem também como "prévia": o que o telão mostraria com o
+// resultado à vista. Fica só no controle (com login), nunca no link da projeção.
 
 export type AtividadeControle = {
   id: string;
@@ -34,29 +43,38 @@ export type Moderacao =
     };
 
 export type EstadoControle = {
-  evento: { id: string; nomeTurma: string; codigoAcesso: string; projecaoToken: string; atividadeAtualId: string | null };
+  evento: {
+    id: string;
+    nomeTurma: string;
+    cooperativa: string | null;
+    codigoAcesso: string;
+    projecaoToken: string;
+    atividadeAtualId: string | null;
+  };
   inscritos: number;
   atividades: AtividadeControle[];
   moderacao: Moderacao | null;
+  previa: EstadoProjecao["atividade"];
 };
 
 async function moderacaoDa(
   supabase: SupabaseClient,
   atividade: AtividadeControle | undefined,
+  resultado: ResultadoAgregado | null,
 ): Promise<Moderacao | null> {
   if (!atividade || atividade.estado === "fechada") return null;
 
   if (atividade.tipo === "nuvem") {
-    const [resultado, ocultas] = await Promise.all([
-      supabase.rpc("resultado_atividade", { atividade: atividade.id }),
-      supabase.from("palavras_ocultas").select("chave").eq("atividade_id", atividade.id).order("chave"),
-    ]);
-    if (resultado.error) throw resultado.error;
+    const ocultas = await supabase
+      .from("palavras_ocultas")
+      .select("chave")
+      .eq("atividade_id", atividade.id)
+      .order("chave");
     if (ocultas.error) throw ocultas.error;
     return {
       tipo: "nuvem",
       atividadeId: atividade.id,
-      palavras: resultado.data?.palavras ?? [],
+      palavras: resultado?.tipo === "nuvem" ? resultado.palavras : [],
       ocultas: ocultas.data.map((o) => o.chave),
     };
   }
@@ -70,15 +88,50 @@ async function moderacaoDa(
   return null;
 }
 
+// O que o telão mostraria com o resultado à vista (mesmo desenho, mesma regra da
+// referência). A partir da rodada 2, compara com a rodada 1.
+async function previaDa(
+  supabase: SupabaseClient,
+  atividade: AtividadeControle | undefined,
+  resultado: ResultadoAgregado | null,
+): Promise<EstadoProjecao["atividade"]> {
+  if (!atividade) return null;
+
+  let config = atividade.config;
+  if (TIPOS_COM_REFERENCIA.includes(atividade.tipo) && !atividade.referencia_revelada) {
+    const semReferencia = { ...(config as { referencia?: number | null }) };
+    delete semReferencia.referencia;
+    config = semReferencia as ConfigAtividade;
+  }
+
+  let resultadoRodada1: ResultadoAgregado | null = null;
+  if (resultado && atividade.rodada_atual > 1 && TIPOS_COM_RODADAS.includes(atividade.tipo)) {
+    const r = await supabase.rpc("resultado_atividade", { atividade: atividade.id, rodada: 1 });
+    if (r.error) throw r.error;
+    resultadoRodada1 = (r.data as ResultadoAgregado) ?? null;
+  }
+
+  return {
+    id: atividade.id,
+    tipo: atividade.tipo,
+    enunciado: atividade.enunciado,
+    config,
+    estado: atividade.estado,
+    rodada: atividade.rodada_atual,
+    resultado,
+    resultadoRodada1,
+  };
+}
+
 export async function estadoControle(
   supabase: SupabaseClient,
   eventoId: string,
-  moderarId?: string | null,
+  selecionadaId?: string | null,
 ): Promise<EstadoControle | null> {
   const [evento, atividades, inscritos] = await Promise.all([
     supabase
       .from("eventos")
-      .select("id, nome_turma, codigo_acesso, projecao_token, atividade_atual_id")
+      .select("id, nome_turma, codigo_acesso, projecao_token, atividade_atual_id, cooperativa:cooperativas(nome)")
       .eq("id", eventoId)
       .maybeSingle(),
     supabase
@@ -94,27 +147,39 @@ export async function estadoControle(
   if (inscritos.error) throw inscritos.error;
   if (!evento.data) return null;
 
-  // Total de respostas (rodada atual) das que já foram abertas, pela função agregada.
-  const totais = await Promise.all(
-    atividades.data.map(async (a) => {
-      if (a.estado === "fechada") return 0;
+  // Resultado agregado (rodada atual) das que já foram abertas: dá o total de cada uma
+  // e, para a selecionada, a moderação e a prévia.
+  const resultados = await Promise.all(
+    atividades.data.map(async (a): Promise<ResultadoAgregado | null> => {
+      if (a.estado === "fechada") return null;
       const r = await supabase.rpc("resultado_atividade", { atividade: a.id });
       if (r.error) throw r.error;
-      return (r.data?.total as number) ?? 0;
+      return (r.data as ResultadoAgregado) ?? null;
     }),
   );
-  const lista: AtividadeControle[] = atividades.data.map((a, i) => ({ ...a, respostas: totais[i] }));
+  const lista: AtividadeControle[] = atividades.data.map((a, i) => ({ ...a, respostas: resultados[i]?.total ?? 0 }));
+
+  const indice = lista.findIndex((a) => a.id === selecionadaId);
+  const selecionada = indice >= 0 ? lista[indice] : undefined;
+  const resultado = indice >= 0 ? resultados[indice] : null;
+  const [moderacao, previa] = await Promise.all([
+    moderacaoDa(supabase, selecionada, resultado),
+    previaDa(supabase, selecionada, resultado),
+  ]);
+  const cooperativa = evento.data.cooperativa as unknown as { nome: string } | null;
 
   return {
     evento: {
       id: evento.data.id,
       nomeTurma: evento.data.nome_turma,
+      cooperativa: cooperativa?.nome ?? null,
       codigoAcesso: evento.data.codigo_acesso,
       projecaoToken: evento.data.projecao_token,
       atividadeAtualId: evento.data.atividade_atual_id,
     },
     inscritos: inscritos.count ?? 0,
     atividades: lista,
-    moderacao: await moderacaoDa(supabase, lista.find((a) => a.id === moderarId)),
+    moderacao,
+    previa,
   };
 }

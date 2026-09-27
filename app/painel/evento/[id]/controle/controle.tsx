@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Marca } from "@/components/marca";
+import { TelaProjecao } from "@/components/tela-projecao";
 import { useEstadoAoVivo } from "@/components/use-estado-ao-vivo";
 import {
   formatarNumero,
@@ -60,14 +61,14 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
     inicial.evento.atividadeAtualId ?? inicial.atividades[0]?.id ?? null,
   );
 
-  // A atividade selecionada vem com os dados de moderação (nuvem e abertas).
+  // A atividade selecionada vem com a prévia do telão e a moderação (nuvem e abertas).
   const { dados, semConexao, recarregar } = useEstadoAoVivo<EstadoControle>(
-    `/api/painel/evento/${eventoId}/controle${selecionadaId ? `?moderar=${selecionadaId}` : ""}`,
+    `/api/painel/evento/${eventoId}/controle${selecionadaId ? `?selecionada=${selecionadaId}` : ""}`,
     eventoId,
     inicial,
     { ouvirRespostas: true, aoPerderSessao: () => router.replace("/login") },
   );
-  const { evento, atividades, inscritos, moderacao } = dados;
+  const { evento, atividades, inscritos, moderacao, previa } = dados;
 
   const selecionada = atividades.find((a) => a.id === selecionadaId) ?? atividades[0] ?? null;
   const aberta = atividades.find((a) => a.estado === "aberta") ?? null;
@@ -182,15 +183,33 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
                 <PainelModeracao eventoId={eventoId} moderacao={moderacao} aoMudar={recarregar} />
               )}
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="mb-2 flex items-center justify-between text-sm text-slate-500">
-                  <span>No telão agora</span>
-                  <Link href={`/projecao/${evento.projecaoToken}`} target="_blank" className="hover:underline">
-                    Abrir projeção ↗
-                  </Link>
+              {previa && previa.id === selecionada.id && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="mb-2 flex items-baseline justify-between gap-3 text-sm">
+                    <span className="font-medium text-slate-700">Prévia: só você vê</span>
+                    <Link
+                      href={`/projecao/${evento.projecaoToken}`}
+                      target="_blank"
+                      className="shrink-0 text-slate-500 hover:underline"
+                    >
+                      Abrir projeção ↗
+                    </Link>
+                  </div>
+                  <div className="aspect-video w-full overflow-hidden rounded-lg border-2 border-dashed border-slate-300">
+                    <TelaProjecao
+                      evento={evento}
+                      atividade={previa}
+                      endereco=""
+                      mensagemSemResultado={
+                        selecionada.estado === "fechada"
+                          ? "Ainda não aberta: o resultado aparece aqui quando as respostas chegarem."
+                          : undefined
+                      }
+                    />
+                  </div>
+                  <p className="mt-2 text-sm text-slate-500">{legendaPrevia(selecionada, evento.atividadeAtualId)}</p>
                 </div>
-                <PreviaTelao caminho={`/projecao/${evento.projecaoToken}`} />
-              </div>
+              )}
             </section>
           )}
         </div>
@@ -279,28 +298,10 @@ function BotoesComando({
   );
 }
 
-// Miniatura do telão: a própria página de projeção, reduzida.
-function PreviaTelao({ caminho }: { caminho: string }) {
-  const caixa = useRef<HTMLDivElement>(null);
-  const [escala, setEscala] = useState(0.3);
-
-  useEffect(() => {
-    const el = caixa.current;
-    if (!el) return;
-    const observador = new ResizeObserver(() => setEscala(el.clientWidth / 1280));
-    observador.observe(el);
-    return () => observador.disconnect();
-  }, []);
-
-  return (
-    <div ref={caixa} className="relative aspect-video w-full overflow-hidden rounded-lg border border-slate-200">
-      <iframe
-        src={caminho}
-        title="Prévia do telão"
-        tabIndex={-1}
-        className="pointer-events-none absolute left-0 top-0 origin-top-left border-0"
-        style={{ width: 1280, height: 720, transform: `scale(${escala})` }}
-      />
-    </div>
-  );
+// Diz se a prévia (que sempre mostra o resultado) é o que a turma está vendo.
+function legendaPrevia(a: AtividadeControle, atividadeAtualId: string | null) {
+  const noTelao = atividadeAtualId === a.id && (a.estado === "aberta" || a.resultado_visivel);
+  if (!noTelao) return "Esta atividade não está no telão.";
+  if (a.resultado_visivel) return "No telão agora, igual a esta prévia.";
+  return "No telão agora só a pergunta; o resultado aparece quando você tocar em Mostrar resultado.";
 }

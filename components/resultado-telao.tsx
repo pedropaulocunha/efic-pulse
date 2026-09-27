@@ -36,12 +36,12 @@ function percentual(n: number, total: number) {
 // Legenda da comparação de rodadas.
 export function LegendaRodadas({ rodada }: { rodada: number }) {
   return (
-    <span className="inline-flex items-center gap-[1.5vw] text-[1.5vw] text-slate-500">
-      <span className="inline-flex items-center gap-[0.5vw]">
-        <span className="inline-block h-[1.2vh] w-[2.4vw] rounded-r-[4px] bg-slate-400 opacity-35" /> rodada 1
+    <span className="inline-flex items-center gap-[1.5cqw] text-[1.5cqw] text-slate-500">
+      <span className="inline-flex items-center gap-[0.5cqw]">
+        <span className="inline-block h-[1.2cqh] w-[2.4cqw] rounded-r-[4px] bg-slate-400 opacity-35" /> rodada 1
       </span>
-      <span className="inline-flex items-center gap-[0.5vw]">
-        <span className="inline-block h-[1.2vh] w-[2.4vw] rounded-r-[4px] bg-slate-500" /> rodada {rodada}
+      <span className="inline-flex items-center gap-[0.5cqw]">
+        <span className="inline-block h-[1.2cqh] w-[2.4cqw] rounded-r-[4px] bg-slate-500" /> rodada {rodada}
       </span>
     </span>
   );
@@ -50,16 +50,16 @@ export function LegendaRodadas({ rodada }: { rodada: number }) {
 // Barra horizontal: a da rodada 1 (se houver) em cima, fina e clara; a atual embaixo.
 function BarraComparada({ fracao, fracaoAntes, cor }: { fracao: number; fracaoAntes?: number; cor: string }) {
   return (
-    <div className="flex flex-col gap-[0.5vh]">
+    <div className="flex flex-col gap-[0.5cqh]">
       {fracaoAntes !== undefined && (
-        <div className="h-[1.6vh] rounded-r-[4px] bg-slate-100">
+        <div className="h-[1.6cqh] rounded-r-[4px] bg-slate-100">
           <div
             className="h-full rounded-r-[4px] opacity-35 transition-[width] duration-700 ease-out"
             style={{ width: `${fracaoAntes * 100}%`, backgroundColor: cor }}
           />
         </div>
       )}
-      <div className={`${fracaoAntes !== undefined ? "h-[4vh]" : "h-[5.5vh]"} rounded-r-[4px] bg-slate-100`}>
+      <div className={`${fracaoAntes !== undefined ? "h-[4cqh]" : "h-[5.5cqh]"} rounded-r-[4px] bg-slate-100`}>
         <div
           className="h-full rounded-r-[4px] transition-[width] duration-700 ease-out"
           style={{ width: `${fracao * 100}%`, backgroundColor: cor }}
@@ -85,21 +85,21 @@ export function BarrasMultipla({
   const maior = Math.max(1, ...resultado.contagem, ...(anterior?.contagem ?? []));
   return (
     // Uma grade só para todas as linhas: as trilhas das barras ficam alinhadas.
-    <div className="grid w-full grid-cols-[minmax(0,32%)_1fr_auto] items-center gap-x-[2vw] gap-y-[2vh]">
+    <div className="grid w-full grid-cols-[minmax(0,32%)_1fr_auto] items-center gap-x-[2cqw] gap-y-[2cqh]">
       {config.opcoes.map((opcao, i) => {
         const n = resultado.contagem[i] ?? 0;
         const antes = anterior?.contagem[i];
         return (
           <div key={i} className="contents">
-            <span className="truncate text-[2vw] leading-tight text-slate-800">{opcao}</span>
+            <span className="truncate text-[2cqw] leading-tight text-slate-800">{opcao}</span>
             <BarraComparada
               fracao={n / maior}
               fracaoAntes={antes === undefined ? undefined : antes / maior}
               cor={corDaOpcao(i)}
             />
-            <span className="min-w-[10vw] whitespace-nowrap text-right text-[2vw] tabular-nums text-slate-900">
+            <span className="min-w-[10cqw] whitespace-nowrap text-right text-[2cqw] tabular-nums text-slate-900">
               {percentual(n, resultado.total)}%
-              <span className="ml-[0.6vw] text-[1.3vw] text-slate-500">
+              <span className="ml-[0.6cqw] text-[1.3cqw] text-slate-500">
                 {anterior ? `(antes ${percentual(antes ?? 0, anterior.total)}%)` : `(${n})`}
               </span>
             </span>
@@ -140,7 +140,7 @@ export function PontosOrdenar({
   return (
     // Uma grade só para todas as linhas: as trilhas das barras ficam alinhadas.
     <div
-      className={`grid w-full items-center gap-x-[1.5vw] gap-y-[2vh] ${
+      className={`grid w-full items-center gap-x-[1.5cqw] gap-y-[2cqh] ${
         posicaoAntes ? "grid-cols-[4vw_minmax(0,30%)_1fr_auto]" : "grid-cols-[4vw_minmax(0,30%)_1fr]"
       }`}
     >
@@ -149,15 +149,15 @@ export function PontosOrdenar({
         const antes = anterior?.pontos[i];
         return (
           <div key={i} className="contents">
-            <span className="text-[2vw] font-semibold tabular-nums text-slate-400">{pos + 1}º</span>
-            <span className="truncate text-[2vw] leading-tight text-slate-800">{config.itens[i]}</span>
+            <span className="text-[2cqw] font-semibold tabular-nums text-slate-400">{pos + 1}º</span>
+            <span className="truncate text-[2cqw] leading-tight text-slate-800">{config.itens[i]}</span>
             <BarraComparada
               fracao={pts / maior}
               fracaoAntes={antes === undefined ? undefined : antes / maior}
               cor={corDaOpcao(i)}
             />
             {posicaoAntes && (
-              <span className="whitespace-nowrap text-right text-[1.3vw] text-slate-500">
+              <span className="whitespace-nowrap text-right text-[1.3cqw] text-slate-500">
                 (antes {posicaoAntes.get(i)}º)
               </span>
             )}
@@ -215,7 +215,7 @@ function faixasDoEixo(
 // Pedacinho da linha do gráfico, ao lado do número que ela representa.
 function AmostraLinha({ cor, tracejada = false, grossa = false }: { cor: string; tracejada?: boolean; grossa?: boolean }) {
   return (
-    <svg viewBox="0 0 40 10" className="h-[1.2vw] w-[3vw] shrink-0" aria-hidden>
+    <svg viewBox="0 0 40 10" className="h-[1.2cqw] w-[3cqw] shrink-0" aria-hidden>
       <line
         x1={0}
         x2={40}
@@ -277,19 +277,19 @@ export function HistogramaNumerico({
   // Cada número vem com a amostra da própria linha: é a legenda (sem repetir embaixo).
   return (
     <div className="flex w-full flex-col">
-      <div className="mb-[2vh] flex flex-wrap items-center gap-x-[3vw] gap-y-[1vh] text-[1.7vw] text-slate-700">
-        <span className="inline-flex items-center gap-[0.7vw]">
+      <div className="mb-[2cqh] flex flex-wrap items-center gap-x-[3cqw] gap-y-[1cqh] text-[1.7cqw] text-slate-700">
+        <span className="inline-flex items-center gap-[0.7cqw]">
           <AmostraLinha cor={COR_MEDIA} />
           Média <strong className="tabular-nums text-slate-900">{numero(resultado.media)}</strong>
-          {anterior && <span className="text-[1.4vw] text-slate-500">(antes {numero(anterior.media)})</span>}
+          {anterior && <span className="text-[1.4cqw] text-slate-500">(antes {numero(anterior.media)})</span>}
         </span>
-        <span className="inline-flex items-center gap-[0.7vw]">
+        <span className="inline-flex items-center gap-[0.7cqw]">
           <AmostraLinha cor={COR_MEDIANA} tracejada />
           Mediana <strong className="tabular-nums text-slate-900">{numero(resultado.mediana)}</strong>
-          {anterior && <span className="text-[1.4vw] text-slate-500">(antes {numero(anterior.mediana)})</span>}
+          {anterior && <span className="text-[1.4cqw] text-slate-500">(antes {numero(anterior.mediana)})</span>}
         </span>
         {referencia !== null && (
-          <span className="inline-flex items-center gap-[0.7vw]" style={{ color: COR_REFERENCIA_TEXTO }}>
+          <span className="inline-flex items-center gap-[0.7cqw]" style={{ color: COR_REFERENCIA_TEXTO }}>
             <AmostraLinha cor={COR_REFERENCIA} grossa />
             Referência <strong className="tabular-nums">{numero(referencia)}</strong>
           </span>
@@ -299,7 +299,7 @@ export function HistogramaNumerico({
       <svg
         viewBox={`0 0 ${L} 420`}
         preserveAspectRatio="none"
-        className="h-[32vh] w-full"
+        className="h-[32cqh] w-full"
         role="img"
         aria-label="Histograma das respostas"
       >
@@ -349,7 +349,7 @@ export function HistogramaNumerico({
           </g>
         ))}
       </svg>
-      <div className="mt-[0.5vh] flex justify-between text-[1.4vw] text-slate-500">
+      <div className="mt-[0.5cqh] flex justify-between text-[1.4cqw] text-slate-500">
         <span>{formatarNumero(lo, unidade)}</span>
         <span>{formatarNumero(hi, unidade)}</span>
       </div>
@@ -374,7 +374,7 @@ export function NuvemPalavras({ resultado }: { resultado: Resultado<"nuvem"> }) 
   palavras.forEach((p, i) => (i % 2 === 0 ? arrumadas.push(p) : arrumadas.unshift(p)));
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-center gap-x-[2.2vw] gap-y-[1vh]">
+    <div className="flex w-full flex-wrap items-center justify-center gap-x-[2.2cqw] gap-y-[1cqh]">
       {arrumadas.map((p) => {
         const peso = Math.sqrt(p.n / maior); // área proporcional à frequência
         return (
@@ -383,7 +383,7 @@ export function NuvemPalavras({ resultado }: { resultado: Resultado<"nuvem"> }) 
             title={`${p.palavra}: ${p.n}`}
             className="leading-none"
             style={{
-              fontSize: `${1.6 + peso * 5.4}vw`,
+              fontSize: `${1.6 + peso * 5.4}cqw`,
               fontWeight: peso > 0.6 ? 700 : peso > 0.3 ? 600 : 500,
               color: cores.get(p.chave),
             }}
@@ -403,17 +403,17 @@ export function NuvemPalavras({ resultado }: { resultado: Resultado<"nuvem"> }) 
 export function MuralAbertas({ resultado }: { resultado: Resultado<"aberta"> }) {
   const textos = resultado.aprovadas.slice(0, 12);
   if (textos.length === 0) {
-    return <p className="w-full text-center text-[2.4vw] text-slate-400">As respostas aparecem aqui quando aprovadas.</p>;
+    return <p className="w-full text-center text-[2.4cqw] text-slate-400">As respostas aparecem aqui quando aprovadas.</p>;
   }
   // Menos cartões, letra maior.
-  const tamanho = textos.length <= 3 ? "text-[2vw]" : textos.length <= 6 ? "text-[1.7vw]" : "text-[1.4vw]";
+  const tamanho = textos.length <= 3 ? "text-[2cqw]" : textos.length <= 6 ? "text-[1.7cqw]" : "text-[1.4cqw]";
   const colunas = textos.length <= 2 ? "grid-cols-2" : textos.length <= 6 ? "grid-cols-3" : "grid-cols-4";
   return (
-    <div className={`grid w-full ${colunas} gap-[1.5vw]`}>
+    <div className={`grid w-full ${colunas} gap-[1.5cqw]`}>
       {textos.map((t, i) => (
         <p
           key={`${i}-${t}`}
-          className={`rounded-[0.8vw] border-t-[0.6vh] bg-slate-50 px-[1.5vw] py-[2vh] leading-snug text-slate-800 ${tamanho}`}
+          className={`rounded-[0.8cqw] border-t-[0.6cqh] bg-slate-50 px-[1.5cqw] py-[2cqh] leading-snug text-slate-800 ${tamanho}`}
           style={{ borderTopColor: CORES_TEXTO[i % CORES_TEXTO.length] }}
         >
           {t}
