@@ -31,7 +31,7 @@ export default async function EditarAtividade({
   const [atividade, blocos] = await Promise.all([
     supabase
       .from("atividades")
-      .select("tipo, enunciado, config, estado, bloco_id, eventos(nome_turma)")
+      .select("tipo, enunciado, config, estado, bloco_id, eventos!atividades_evento_id_fkey(nome_turma)")
       .eq("id", atividadeId)
       .eq("evento_id", id)
       .maybeSingle<Atividade>(),
