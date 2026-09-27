@@ -9,10 +9,19 @@ Um evento pode ter várias partes (ex.: Abertura com 4 perguntas, Estudo de caso
 - Tabela `blocos` (`evento_id`, `ordem`, `titulo`), com RLS igual à das atividades. `atividades.bloco_id` é opcional; o banco só aceita bloco do mesmo evento.
 - Ordem na tela: primeiro as atividades sem bloco, depois cada bloco na ordem dele. A numeração das atividades é corrida (1 a 18), atravessando os blocos.
 - **Painel do evento:** "Novo bloco"; em cada bloco, "+ Atividade", ↑ ↓, Renomear e Excluir. As setas das atividades atravessam blocos: na ponta de um bloco, a atividade passa para o bloco vizinho (inclusive um bloco vazio).
-- Excluir um bloco não apaga as atividades: elas ficam sem bloco.
+- Excluir um bloco: veja a revisão abaixo (só bloco vazio).
 - **Formulário da atividade:** campo "Bloco" (aparece quando o evento tem blocos).
 - **Controle:** a lista da esquerda mostra o título de cada bloco.
 - Celular e telão não mudam: uma pergunta por vez.
+
+### Revisão de 27/09/2026 (migração 0024)
+
+- **Toda atividade pertence a um bloco.** O banco exige; as que estavam sem bloco foram para um bloco "Geral", no topo de cada evento que tinha alguma.
+- Sem blocos no evento, o botão "Nova atividade" some e a tela pede para criar um bloco primeiro.
+- **Mudar de bloco:** campo "Bloco" em cada atividade da lista (vale também para atividade já aberta ou encerrada; vai para o fim do bloco escolhido). As setas continuam atravessando blocos, mas não há mais "sem bloco".
+- **Duplicar atividade:** cópia fechada, sem respostas, logo abaixo da original, com "(cópia)" no fim da pergunta.
+- **Duplicar bloco:** bloco "(cópia)" logo abaixo, com cópias fechadas de todas as atividades.
+- **Excluir bloco** só quando ele está vazio (o banco também confere).
 
 ## 2. Entrada só com o código
 

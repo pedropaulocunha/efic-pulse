@@ -26,6 +26,7 @@ import {
   BotaoNovoBloco,
   BotoesAtividade,
   CabecalhoBloco,
+  SeletorBloco,
 } from "./botoes-evento";
 
 type Atividade = {
@@ -204,16 +205,18 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
             <h2 className="text-lg font-medium text-slate-700">Atividades ({totalAtividades})</h2>
             <div className="flex flex-wrap items-start gap-3">
               <BotaoNovoBloco eventoId={e.id} />
-              <Link href={`/painel/evento/${e.id}/atividade/nova`} className={estiloBotaoSecundario}>
-                Nova atividade
-              </Link>
+              {blocos.data.length > 0 && (
+                <Link href={`/painel/evento/${e.id}/atividade/nova`} className={estiloBotaoSecundario}>
+                  Nova atividade
+                </Link>
+              )}
             </div>
           </div>
 
           {grupos.length === 0 ? (
             <p className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-slate-500">
-              Nenhuma atividade ainda. Crie as perguntas que você vai abrir na sala. Para separar em partes
-              (abertura, estudos de caso, encerramento), crie blocos.
+              Nenhuma atividade ainda. Toda pergunta fica dentro de um bloco: comece em <strong>Novo bloco</strong>
+              (ex.: Abertura) e depois toque em <strong>+ Atividade</strong> no bloco.
             </p>
           ) : (
             <div className="mt-4 space-y-6">
@@ -224,7 +227,7 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
                       eventoId={e.id}
                       bloco={g.bloco}
                       quantidade={g.atividades.length}
-                      primeiro={gi === 0 || (gi === 1 && grupos[0].bloco === null)}
+                      primeiro={gi === 0}
                       ultimo={gi === grupos.length - 1}
                     />
                   ) : (
@@ -249,6 +252,14 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
                               <p className="mt-1 text-sm text-slate-500">
                                 {rotuloTipo[a.tipo]} · {resumoConfig(a)}
                               </p>
+                              {a.bloco_id && blocos.data.length > 1 && (
+                                <SeletorBloco
+                                  eventoId={e.id}
+                                  atividadeId={a.id}
+                                  blocoAtual={a.bloco_id}
+                                  blocos={[...blocos.data].sort((x, y) => x.ordem - y.ordem)}
+                                />
+                              )}
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                               <span className={`rounded-full px-3 py-1 text-sm ${corEstadoAtividade[a.estado]}`}>
@@ -267,7 +278,7 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
                               <BotoesAtividade
                                 eventoId={e.id}
                                 atividadeId={a.id}
-                                primeira={g.bloco === null && i === 0}
+                                primeira={gi === 0 && i === 0}
                                 ultima={gi === grupos.length - 1 && i === g.atividades.length - 1}
                                 podeExcluir={a.estado !== "aberta"}
                               />

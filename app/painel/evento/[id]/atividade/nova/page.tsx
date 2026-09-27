@@ -38,7 +38,15 @@ export default async function NovaAtividade({
         </Link>
         <h1 className="mt-4 text-2xl font-semibold">Nova atividade</h1>
         <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
-          <FormularioAtividade eventoId={id} atividadeId={null} blocos={blocos.data} blocoInicial={blocoInicial} />
+          {blocos.data.length === 0 ? (
+            // Toda atividade pertence a um bloco: primeiro cria-se o bloco.
+            <p className="text-slate-600">
+              Toda pergunta fica dentro de um bloco. Volte ao evento, toque em <strong>Novo bloco</strong> (ex.:
+              Abertura) e depois em <strong>+ Atividade</strong> no bloco.
+            </p>
+          ) : (
+            <FormularioAtividade eventoId={id} atividadeId={null} blocos={blocos.data} blocoInicial={blocoInicial} />
+          )}
         </div>
       </main>
     </div>

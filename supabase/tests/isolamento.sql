@@ -134,14 +134,20 @@ select id, repeat('a', 64), now() + interval '1 day'
 
 insert into public.tentativas_entrada (ip_hash, sucesso) values ('teste', false);
 
--- Atividades: duas no evento do A (múltipla e escala com referência), uma no do B (nuvem).
-insert into public.atividades (id, evento_id, ordem, tipo, enunciado, config)
+-- Blocos: um em cada evento.
+insert into public.blocos (id, evento_id, ordem, titulo)
 values
-  ('00000000-0000-4000-e000-0000000000a1', '00000000-0000-4000-c000-00000000000a', 1, 'multipla',
+  ('00000000-0000-4000-9000-0000000000a1', '00000000-0000-4000-c000-00000000000a', 1, 'Abertura do A'),
+  ('00000000-0000-4000-9000-0000000000b1', '00000000-0000-4000-c000-00000000000b', 1, 'Abertura do B');
+
+-- Atividades: duas no evento do A (múltipla e escala com referência), uma no do B (nuvem).
+insert into public.atividades (id, evento_id, bloco_id, ordem, tipo, enunciado, config)
+values
+  ('00000000-0000-4000-e000-0000000000a1', '00000000-0000-4000-c000-00000000000a', '00000000-0000-4000-9000-0000000000a1', 1, 'multipla',
    'Qual a maior causa de atraso?', '{"opcoes": ["Desemprego", "Doença", "Descontrole"]}'),
-  ('00000000-0000-4000-e000-0000000000a2', '00000000-0000-4000-c000-00000000000a', 2, 'escala',
+  ('00000000-0000-4000-e000-0000000000a2', '00000000-0000-4000-c000-00000000000a', '00000000-0000-4000-9000-0000000000a1', 2, 'escala',
    'Quanto da carteira está em atraso?', '{"min": 0, "max": 100, "passo": 5, "unidade": "%", "referencia": 35}'),
-  ('00000000-0000-4000-e000-0000000000b1', '00000000-0000-4000-c000-00000000000b', 1, 'nuvem',
+  ('00000000-0000-4000-e000-0000000000b1', '00000000-0000-4000-c000-00000000000b', '00000000-0000-4000-9000-0000000000b1', 1, 'nuvem',
    'Uma palavra sobre cobrança', '{"max_palavras": 3}');
 
 -- Daqui até o bloco do instrutor A, simula o servidor (chave secreta).
@@ -153,15 +159,15 @@ declare
 begin
   -- Configuração inválida é recusada pelo banco.
   begin
-    insert into public.atividades (evento_id, ordem, tipo, enunciado, config)
-    values ('00000000-0000-4000-c000-00000000000a', 9, 'multipla', 'Só uma opção', '{"opcoes": ["A"]}');
+    insert into public.atividades (evento_id, bloco_id, ordem, tipo, enunciado, config)
+    values ('00000000-0000-4000-c000-00000000000a', '00000000-0000-4000-9000-0000000000a1', 9, 'multipla', 'Só uma opção', '{"opcoes": ["A"]}');
     raise exception 'FALHOU: aceitou múltipla escolha com uma opção só';
   exception when check_violation then
     null;
   end;
   begin
-    insert into public.atividades (evento_id, ordem, tipo, enunciado, config)
-    values ('00000000-0000-4000-c000-00000000000a', 9, 'escala', 'Passo torto', '{"min": 0, "max": 10, "passo": 3}');
+    insert into public.atividades (evento_id, bloco_id, ordem, tipo, enunciado, config)
+    values ('00000000-0000-4000-c000-00000000000a', '00000000-0000-4000-9000-0000000000a1', 9, 'escala', 'Passo torto', '{"min": 0, "max": 10, "passo": 3}');
     raise exception 'FALHOU: aceitou escala com passo que não divide o intervalo';
   exception when check_violation then
     null;
@@ -228,8 +234,8 @@ begin
 end $$;
 
 -- Fatia 3: uma resposta aberta no evento do B, para os testes de moderação.
-insert into public.atividades (id, evento_id, ordem, tipo, enunciado, config)
-values ('00000000-0000-4000-e000-0000000000b2', '00000000-0000-4000-c000-00000000000b', 2, 'aberta',
+insert into public.atividades (id, evento_id, bloco_id, ordem, tipo, enunciado, config)
+values ('00000000-0000-4000-e000-0000000000b2', '00000000-0000-4000-c000-00000000000b', '00000000-0000-4000-9000-0000000000b1', 2, 'aberta',
         'O que mais trava a cobrança?', '{"max_caracteres": 280}');
 
 do $$
@@ -305,11 +311,6 @@ begin
   delete from public.inscricoes where origem = 'anonima';
 end $$;
 
--- Blocos: um em cada evento.
-insert into public.blocos (id, evento_id, ordem, titulo)
-values
-  ('00000000-0000-4000-9000-0000000000a1', '00000000-0000-4000-c000-00000000000a', 1, 'Abertura do A'),
-  ('00000000-0000-4000-9000-0000000000b1', '00000000-0000-4000-c000-00000000000b', 1, 'Abertura do B');
 
 -- ---------------------------------------------------------------
 -- Instrutor A
@@ -452,11 +453,11 @@ begin
   end if;
 
   -- Cria atividade no próprio evento, mas não no do B.
-  insert into public.atividades (evento_id, ordem, tipo, enunciado, config)
-  values ('00000000-0000-4000-c000-00000000000a', 3, 'nuvem', 'Nova do A', '{"max_palavras": 1}');
+  insert into public.atividades (evento_id, bloco_id, ordem, tipo, enunciado, config)
+  values ('00000000-0000-4000-c000-00000000000a', '00000000-0000-4000-9000-0000000000a1', 3, 'nuvem', 'Nova do A', '{"max_palavras": 1}');
   begin
-    insert into public.atividades (evento_id, ordem, tipo, enunciado, config)
-    values ('00000000-0000-4000-c000-00000000000b', 9, 'nuvem', 'Intrusa', '{"max_palavras": 1}');
+    insert into public.atividades (evento_id, bloco_id, ordem, tipo, enunciado, config)
+    values ('00000000-0000-4000-c000-00000000000b', '00000000-0000-4000-9000-0000000000b1', 9, 'nuvem', 'Intrusa', '{"max_palavras": 1}');
     raise exception 'FALHOU: instrutor A criou atividade no evento do B';
   exception when insufficient_privilege then
     null;
@@ -580,6 +581,48 @@ begin
   if linhas <> 1 then
     raise exception 'FALHOU: instrutor A não pôs atividade no próprio bloco';
   end if;
+
+  -- Atividade sem bloco é recusada pelo banco (0024).
+  begin
+    insert into public.atividades (evento_id, ordem, tipo, enunciado, config)
+    values ('00000000-0000-4000-c000-00000000000a', 9, 'nuvem', 'Sem bloco', '{"max_palavras": 1}');
+    raise exception 'FALHOU: aceitou atividade sem bloco';
+  exception when not_null_violation then
+    null;
+  end;
+
+  -- Duplica a própria atividade e o próprio bloco; não os do B.
+  perform public.duplicar_atividade('00000000-0000-4000-e000-0000000000a2');
+  if (select count(*) from public.atividades
+       where evento_id = '00000000-0000-4000-c000-00000000000a'
+         and enunciado = 'Quanto da carteira está em atraso? (cópia)' and estado = 'fechada') <> 1 then
+    raise exception 'FALHOU: instrutor A não duplicou a própria atividade';
+  end if;
+  perform public.duplicar_bloco('00000000-0000-4000-9000-0000000000a1');
+  if (select count(*) from public.blocos
+       where evento_id = '00000000-0000-4000-c000-00000000000a' and titulo = 'Abertura do A (cópia)') <> 1 then
+    raise exception 'FALHOU: instrutor A não duplicou o próprio bloco';
+  end if;
+  begin
+    perform public.duplicar_atividade('00000000-0000-4000-e000-0000000000b1');
+    raise exception 'FALHOU: instrutor A duplicou atividade do B';
+  exception when no_data_found then
+    null;
+  end;
+  begin
+    perform public.duplicar_bloco('00000000-0000-4000-9000-0000000000b1');
+    raise exception 'FALHOU: instrutor A duplicou bloco do B';
+  exception when no_data_found then
+    null;
+  end;
+
+  -- Bloco com atividades não pode ser excluído.
+  begin
+    delete from public.blocos where id = '00000000-0000-4000-9000-0000000000a1';
+    raise exception 'FALHOU: excluiu bloco com atividades';
+  exception when foreign_key_violation then
+    null;
+  end;
 
   -- Não encerra o evento do B.
   begin

@@ -65,7 +65,8 @@ export default function FormularioAtividade({
 
   const [tipo, setTipo] = useState<TipoAtividade>(atividade?.tipo ?? "multipla");
   const [enunciado, setEnunciado] = useState(atividade?.enunciado ?? "");
-  const [bloco, setBloco] = useState(blocoInicial ?? "");
+  // Toda atividade pertence a um bloco: sem indicação, vai para o primeiro.
+  const [bloco, setBloco] = useState(blocoInicial ?? blocos[0]?.id ?? "");
 
   const cMultipla = atividade?.tipo === "multipla" ? (atividade.config as ConfigMultipla) : null;
   const [opcoes, setOpcoes] = useState<string[]>(cMultipla?.opcoes ?? ["", "", ""]);
@@ -139,18 +140,21 @@ export default function FormularioAtividade({
         </fieldset>
       )}
 
-      {blocos.length > 0 && (
-        <Campo rotulo="Bloco" dica="Grupo de perguntas do evento, como Abertura ou Estudo de caso 1.">
-          <select name="bloco" value={bloco} onChange={(e) => setBloco(e.target.value)} className={estiloCampo}>
-            <option value="">Sem bloco</option>
-            {blocos.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.titulo}
-              </option>
-            ))}
-          </select>
-        </Campo>
-      )}
+      <Campo rotulo="Bloco" dica="Grupo de perguntas do evento, como Abertura ou Estudo de caso 1.">
+        <select
+          name="bloco"
+          required
+          value={bloco}
+          onChange={(e) => setBloco(e.target.value)}
+          className={estiloCampo}
+        >
+          {blocos.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.titulo}
+            </option>
+          ))}
+        </select>
+      </Campo>
 
       <Campo rotulo="Pergunta" dica={exemplos[tipo]}>
         <textarea

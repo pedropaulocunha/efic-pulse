@@ -5,11 +5,14 @@ import { useState, useTransition } from "react";
 import { estiloBotaoSecundario } from "@/components/ui";
 import {
   criarBloco,
+  duplicarAtividade,
+  duplicarBloco,
   encerrarEvento,
   excluirAtividade,
   excluirBloco,
   moverAtividade,
   moverBloco,
+  moverParaBloco,
   reabrirEvento,
   renomearBloco,
 } from "../acoes-atividades";
@@ -124,6 +127,19 @@ export function BotoesAtividade({
       >
         ↓
       </button>
+      <button
+        type="button"
+        disabled={ocupado}
+        onClick={() =>
+          iniciar(async () => {
+            const r = await duplicarAtividade(eventoId, atividadeId);
+            if (r.erro) setErro(r.erro);
+          })
+        }
+        className={estiloBotaoPequeno}
+      >
+        Duplicar
+      </button>
       {podeExcluir && (
         <button type="button" disabled={ocupado} onClick={excluir} className={`${estiloBotaoPequeno} text-red-700`}>
           Excluir
@@ -131,6 +147,49 @@ export function BotoesAtividade({
       )}
       {erro && <span className="text-sm text-red-700">{erro}</span>}
     </div>
+  );
+}
+
+// Trocar a atividade de bloco (vai para o fim do bloco escolhido). Vale em qualquer estado.
+export function SeletorBloco({
+  eventoId,
+  atividadeId,
+  blocoAtual,
+  blocos,
+}: {
+  eventoId: string;
+  atividadeId: string;
+  blocoAtual: string;
+  blocos: { id: string; titulo: string }[];
+}) {
+  const [ocupado, iniciar] = useTransition();
+  const [erro, setErro] = useState<string>();
+
+  return (
+    <label className="mt-2 inline-flex flex-wrap items-center gap-2 text-sm text-slate-500">
+      Bloco:
+      <select
+        value={blocoAtual}
+        disabled={ocupado}
+        onChange={(ev) => {
+          const destino = ev.target.value;
+          setErro(undefined);
+          iniciar(async () => {
+            const r = await moverParaBloco(eventoId, atividadeId, destino);
+            if (r.erro) setErro(r.erro);
+          });
+        }}
+        className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm text-slate-700 disabled:opacity-60"
+      >
+        {blocos.map((b) => (
+          <option key={b.id} value={b.id}>
+            {b.titulo}
+          </option>
+        ))}
+      </select>
+      {ocupado && <span>Movendo…</span>}
+      {erro && <span className="text-red-700">{erro}</span>}
+    </label>
   );
 }
 
@@ -231,11 +290,15 @@ export function CabecalhoBloco({
   const [erro, setErro] = useState<string>();
 
   function excluir() {
-    const aviso =
-      quantidade > 0
-        ? `Excluir o bloco "${bloco.titulo}"?\n\nAs ${quantidade} atividades dele NÃO são apagadas: ficam sem bloco, no topo da lista.`
-        : `Excluir o bloco "${bloco.titulo}"?`;
-    if (!window.confirm(aviso)) return;
+    // Bloco com atividades não se exclui (o banco também confere, 0024).
+    if (quantidade > 0) {
+      const quantas = quantidade === 1 ? "1 atividade" : `${quantidade} atividades`;
+      window.alert(
+        `O bloco "${bloco.titulo}" tem ${quantas}.\n\nMova as atividades para outro bloco (campo "Bloco" de cada uma) ou exclua-as antes de excluir o bloco.`,
+      );
+      return;
+    }
+    if (!window.confirm(`Excluir o bloco "${bloco.titulo}"?`)) return;
     iniciar(async () => {
       const r = await excluirBloco(eventoId, bloco.id);
       if (r.erro) setErro(r.erro);
@@ -287,6 +350,19 @@ export function CabecalhoBloco({
           </button>
           <button type="button" disabled={ocupado} onClick={() => setRenomeando(true)} className={estiloBotaoPequeno}>
             Renomear
+          </button>
+          <button
+            type="button"
+            disabled={ocupado}
+            onClick={() =>
+              iniciar(async () => {
+                const r = await duplicarBloco(eventoId, bloco.id);
+                if (r.erro) setErro(r.erro);
+              })
+            }
+            className={estiloBotaoPequeno}
+          >
+            Duplicar
           </button>
           <button type="button" disabled={ocupado} onClick={excluir} className={`${estiloBotaoPequeno} text-red-700`}>
             Excluir

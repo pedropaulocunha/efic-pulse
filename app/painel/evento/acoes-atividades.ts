@@ -29,10 +29,15 @@ export type EstadoFormularioAtividade = { erro?: string };
 type Cliente = Awaited<ReturnType<typeof criarClienteServidor>>;
 
 // Posição no fim do bloco (a ordem vale dentro de cada bloco). undefined = sem conexão.
-async function proximaOrdem(supabase: Cliente, eventoId: string, blocoId: string | null) {
-  let consulta = supabase.from("atividades").select("ordem").eq("evento_id", eventoId);
-  consulta = blocoId ? consulta.eq("bloco_id", blocoId) : consulta.is("bloco_id", null);
-  const ultima = await consulta.order("ordem", { ascending: false }).limit(1).maybeSingle();
+async function proximaOrdem(supabase: Cliente, eventoId: string, blocoId: string) {
+  const ultima = await supabase
+    .from("atividades")
+    .select("ordem")
+    .eq("evento_id", eventoId)
+    .eq("bloco_id", blocoId)
+    .order("ordem", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   if (ultima.error) return undefined;
   return (ultima.data?.ordem ?? 0) + 1;
 }
@@ -68,10 +73,9 @@ export async function salvarAtividade(
   });
   if ("erro" in validacao) return { erro: validacao.erro };
 
-  // Bloco escolhido (vazio = sem bloco). O banco confere que é do mesmo evento.
-  const blocoBruto = campo("bloco");
-  if (blocoBruto && !uuidValido(blocoBruto)) return { erro: "Bloco inválido." };
-  const blocoId = blocoBruto || null;
+  // Toda atividade pertence a um bloco (0024). O banco confere que é do mesmo evento.
+  const blocoId = campo("bloco");
+  if (!uuidValido(blocoId)) return { erro: "Escolha o bloco da atividade." };
 
   if (atividadeId) {
     // Só dá para editar antes de abrir: depois disso já há respostas ligadas às opções.
@@ -200,7 +204,52 @@ export async function excluirBloco(eventoId: string, blocoId: string): Promise<{
     .eq("id", blocoId)
     .eq("evento_id", eventoId)
     .select("id");
+  // 23503: o bloco ainda tem atividades (o banco não deixa excluir, 0024).
+  if (apagado.error?.code === "23503") return { erro: "Mova ou exclua as atividades deste bloco antes." };
   if (apagado.error || apagado.data.length === 0) return { erro: "Não foi possível excluir. Tente de novo." };
+
+  revalidatePath(`/painel/evento/${eventoId}`);
+  return {};
+}
+
+export async function duplicarBloco(eventoId: string, blocoId: string): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const { error } = await sessao.supabase.rpc("duplicar_bloco", { bloco: blocoId });
+  if (error) return { erro: "Não foi possível duplicar o bloco. Tente de novo." };
+  revalidatePath(`/painel/evento/${eventoId}`);
+  return {};
+}
+
+export async function duplicarAtividade(eventoId: string, atividadeId: string): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const { error } = await sessao.supabase.rpc("duplicar_atividade", { atividade: atividadeId });
+  if (error) return { erro: "Não foi possível duplicar. Tente de novo." };
+  revalidatePath(`/painel/evento/${eventoId}`);
+  return {};
+}
+
+// Leva a atividade para o fim de outro bloco. Vale em qualquer estado (aberta,
+// encerrada...): mudar de bloco não mexe em respostas nem no que está no telão.
+export async function moverParaBloco(
+  eventoId: string,
+  atividadeId: string,
+  blocoId: string,
+): Promise<{ erro?: string }> {
+  if (!uuidValido(blocoId)) return { erro: "Bloco inválido." };
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+
+  const ordem = await proximaOrdem(sessao.supabase, eventoId, blocoId);
+  if (ordem === undefined) return { erro: SEM_CONEXAO };
+  const movida = await sessao.supabase
+    .from("atividades")
+    .update({ bloco_id: blocoId, ordem })
+    .eq("id", atividadeId)
+    .eq("evento_id", eventoId)
+    .select("id");
+  if (movida.error || movida.data.length === 0) return { erro: "Não foi possível mover. Tente de novo." };
 
   revalidatePath(`/painel/evento/${eventoId}`);
   return {};
