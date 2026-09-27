@@ -226,6 +226,28 @@ begin
   end if;
 end $$;
 
+-- Fatia 3: uma resposta aberta no evento do B, para os testes de moderação.
+insert into public.atividades (id, evento_id, ordem, tipo, enunciado, config)
+values ('00000000-0000-4000-e000-0000000000b2', '00000000-0000-4000-c000-00000000000b', 2, 'aberta',
+        'O que mais trava a cobrança?', '{"max_caracteres": 280}');
+
+do $$
+begin
+  perform public.comandar_atividade('00000000-0000-4000-e000-0000000000b2', 'abrir');
+  insert into public.respostas (id, atividade_id, inscricao_id, valor)
+  select '00000000-0000-4000-f000-0000000000b2', '00000000-0000-4000-e000-0000000000b2', id,
+         '{"texto": "Texto do participante do B"}'
+    from public.inscricoes where evento_id = '00000000-0000-4000-c000-00000000000b';
+
+  -- Funções de moderação e de evento: nunca para o visitante sem login.
+  if has_function_privilege('anon', 'public.respostas_abertas(uuid)', 'execute')
+     or has_function_privilege('anon', 'public.moderar_resposta(uuid, boolean)', 'execute')
+     or has_function_privilege('anon', 'public.encerrar_evento(uuid)', 'execute')
+     or has_function_privilege('anon', 'public.reabrir_evento(uuid)', 'execute') then
+    raise exception 'FALHOU: visitante sem login pode executar função de moderação ou de evento';
+  end if;
+end $$;
+
 -- ---------------------------------------------------------------
 -- Instrutor A
 -- ---------------------------------------------------------------
@@ -435,6 +457,41 @@ begin
     raise exception 'FALHOU: instrutor A lê o resultado do evento do B';
   end if;
 
+  -- Fatia 3: não modera nem lê as respostas abertas do evento do B.
+  if public.respostas_abertas('00000000-0000-4000-e000-0000000000b2') is not null then
+    raise exception 'FALHOU: instrutor A lê respostas abertas do evento do B';
+  end if;
+  if public.moderar_resposta('00000000-0000-4000-f000-0000000000b2', true) is not null then
+    raise exception 'FALHOU: instrutor A aprovou resposta do evento do B';
+  end if;
+
+  -- Não oculta palavra em atividade do B; oculta na própria.
+  begin
+    insert into public.palavras_ocultas (atividade_id, chave)
+    values ('00000000-0000-4000-e000-0000000000b1', 'prazo');
+    raise exception 'FALHOU: instrutor A ocultou palavra na atividade do B';
+  exception when insufficient_privilege then
+    null;
+  end;
+  insert into public.palavras_ocultas (atividade_id, chave)
+  values ('00000000-0000-4000-e000-0000000000a1', 'prazo');
+
+  -- Não encerra o evento do B.
+  begin
+    perform public.encerrar_evento('00000000-0000-4000-c000-00000000000b');
+    raise exception 'FALHOU: instrutor A encerrou o evento do B';
+  exception when no_data_found then
+    null;
+  end;
+
+  -- Não reabre evento (só admin).
+  begin
+    perform public.reabrir_evento('00000000-0000-4000-c000-00000000000a');
+    raise exception 'FALHOU: instrutor reabriu evento';
+  exception when insufficient_privilege then
+    null;
+  end;
+
   -- Não mexe em cooperativa (só admin altera).
   update public.cooperativas set nome = 'Alterada' where id = '00000000-0000-4000-b000-000000000001';
   get diagnostics linhas = row_count;
@@ -445,11 +502,15 @@ end $$;
 
 reset role;
 
--- Confere, como dono do banco, que o papel do A continua instrutor.
+-- Confere, como dono do banco, que o papel do A continua instrutor
+-- e que a resposta aberta do B continua sem aprovação.
 do $$
 begin
   if (select papel from public.perfis where id = '00000000-0000-4000-a000-00000000000a') <> 'instrutor' then
     raise exception 'FALHOU: papel do instrutor A mudou';
+  end if;
+  if (select aprovada from public.respostas where id = '00000000-0000-4000-f000-0000000000b2') then
+    raise exception 'FALHOU: resposta aberta do B foi aprovada pelo instrutor A';
   end if;
 end $$;
 
@@ -524,8 +585,11 @@ begin
   end;
 
   -- Admin vê atividades e resultados de qualquer evento.
-  if (select count(*) from public.atividades where evento_id = '00000000-0000-4000-c000-00000000000b') <> 1 then
-    raise exception 'FALHOU: admin não vê atividade do evento do B';
+  if (select count(*) from public.atividades where evento_id = '00000000-0000-4000-c000-00000000000b') <> 2 then
+    raise exception 'FALHOU: admin não vê as atividades do evento do B';
+  end if;
+  if public.respostas_abertas('00000000-0000-4000-e000-0000000000b2') is null then
+    raise exception 'FALHOU: admin não lê respostas abertas do evento do B';
   end if;
   if public.resultado_atividade('00000000-0000-4000-e000-0000000000b1') is null then
     raise exception 'FALHOU: admin não lê o resultado do evento do B';
@@ -583,6 +647,12 @@ begin
   begin
     perform public.sala_estado(repeat('a', 64));
     raise exception 'FALHOU: visitante sem login executa sala_estado';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform 1 from public.palavras_ocultas;
+    raise exception 'FALHOU: visitante sem login lê palavras ocultas';
   exception when insufficient_privilege then
     null;
   end;

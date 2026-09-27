@@ -2,7 +2,49 @@
 
 import { useState, useTransition } from "react";
 import { estiloBotaoSecundario } from "@/components/ui";
-import { excluirAtividade, moverAtividade } from "../acoes-atividades";
+import { encerrarEvento, excluirAtividade, moverAtividade, reabrirEvento } from "../acoes-atividades";
+
+// Encerrar (instrutor ou admin) ou reabrir (só admin) o evento.
+export function BotaoEstadoEvento({
+  eventoId,
+  encerrado,
+  podeReabrir,
+}: {
+  eventoId: string;
+  encerrado: boolean;
+  podeReabrir: boolean;
+}) {
+  const [ocupado, iniciar] = useTransition();
+  const [erro, setErro] = useState<string>();
+
+  if (encerrado && !podeReabrir) return null;
+
+  function agir() {
+    const pergunta = encerrado
+      ? "Reabrir este evento? Se o código de acesso já estiver em uso por outro evento, ele ganha um código novo."
+      : "Encerrar este evento?\n\nOs celulares passam a mostrar \"Este evento já terminou.\" e o código de acesso fica livre para outro evento.";
+    if (!window.confirm(pergunta)) return;
+    setErro(undefined);
+    iniciar(async () => {
+      const r = encerrado ? await reabrirEvento(eventoId) : await encerrarEvento(eventoId);
+      if (r.erro) setErro(r.erro);
+    });
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={agir}
+        disabled={ocupado}
+        className={`${estiloBotaoSecundario} ${encerrado ? "" : "text-red-700"}`}
+      >
+        {ocupado ? "Aguarde…" : encerrado ? "Reabrir evento" : "Encerrar evento"}
+      </button>
+      {erro && <p className="mt-2 text-sm text-red-700">{erro}</p>}
+    </div>
+  );
+}
 
 export function BotaoCopiarLink({ caminho }: { caminho: string }) {
   const [copiado, setCopiado] = useState(false);

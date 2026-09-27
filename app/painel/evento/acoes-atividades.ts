@@ -42,14 +42,18 @@ export async function salvarAtividade(
   const enunciado = textoLimpo(formData.get("enunciado"), 300);
   if (!enunciado) return { erro: "Escreva a pergunta." };
 
+  const campo = (nome: string) => String(formData.get(nome) ?? "");
   const validacao = validarConfig(tipo, {
     opcoes: formData.getAll("opcao").map(String),
-    min: String(formData.get("min") ?? ""),
-    max: String(formData.get("max") ?? ""),
-    passo: String(formData.get("passo") ?? ""),
-    unidade: String(formData.get("unidade") ?? ""),
-    referencia: String(formData.get("referencia") ?? ""),
-    max_palavras: String(formData.get("max_palavras") ?? ""),
+    itens: formData.getAll("item").map(String),
+    min: campo("min"),
+    max: campo("max"),
+    passo: campo("passo"),
+    unidade: campo("unidade"),
+    referencia: campo("referencia"),
+    casas: campo("casas"),
+    max_palavras: campo("max_palavras"),
+    max_caracteres: campo("max_caracteres"),
   });
   if ("erro" in validacao) return { erro: validacao.erro };
 
@@ -124,6 +128,7 @@ export async function moverAtividade(eventoId: string, atividadeId: string, dire
 
 export type Comando =
   | "abrir"
+  | "nova_rodada"
   | "encerrar"
   | "mostrar_resultado"
   | "esconder_resultado"
@@ -132,6 +137,7 @@ export type Comando =
 
 const COMANDOS: Comando[] = [
   "abrir",
+  "nova_rodada",
   "encerrar",
   "mostrar_resultado",
   "esconder_resultado",
@@ -149,14 +155,87 @@ export async function comandarAtividade(
   if ("erro" in sessao) return { erro: sessao.erro };
 
   const { error } = await sessao.supabase.rpc("comandar_atividade", { atividade: atividadeId, comando });
-  if (error) {
-    // Erros previstos pela função (0012) já vêm em português, ex.: "Encerre a atividade aberta antes".
-    const previstos = ["23514", "P0002", "22023"];
-    return {
-      erro: previstos.includes(error.code) ? error.message : "Não foi possível fazer isso agora. Tente de novo.",
-    };
-  }
+  if (error) return { erro: mensagemDoBanco(error) };
 
+  await avisarEvento(eventoId, "estado");
+  return {};
+}
+
+// Erros previstos pelas funções do banco já vêm em português,
+// ex.: "Encerre a atividade aberta antes". Os demais viram uma mensagem genérica.
+function mensagemDoBanco(error: { code: string; message: string }) {
+  const previstos = ["23514", "P0002", "22023", "42501"];
+  return previstos.includes(error.code) ? error.message : "Não foi possível fazer isso agora. Tente de novo.";
+}
+
+// ---------------------------------------------------------------
+// Moderação: nuvem e respostas abertas
+// ---------------------------------------------------------------
+
+// Oculta (ou mostra de novo) uma palavra da nuvem no telão. "chave" é a forma
+// sem acento e no singular que vem do resultado (resultado_atividade, 0018).
+export async function ocultarPalavra(
+  eventoId: string,
+  atividadeId: string,
+  chave: string,
+  ocultar: boolean,
+): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+
+  const tabela = sessao.supabase.from("palavras_ocultas");
+  const { error } = ocultar
+    ? await tabela.upsert({ atividade_id: atividadeId, chave }, { onConflict: "atividade_id,chave", ignoreDuplicates: true })
+    : await tabela.delete().eq("atividade_id", atividadeId).eq("chave", chave);
+  if (error) return { erro: "Não foi possível mudar a palavra. Tente de novo." };
+
+  await avisarEvento(eventoId, "estado");
+  return {};
+}
+
+// Aprova ou recusa uma resposta aberta (moderar_resposta, 0017).
+export async function moderarResposta(
+  eventoId: string,
+  respostaId: string,
+  aprovar: boolean,
+): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+
+  const { data, error } = await sessao.supabase.rpc("moderar_resposta", { resposta: respostaId, aprovar });
+  if (error || !data) return { erro: "Não foi possível moderar esta resposta." };
+
+  await avisarEvento(eventoId, "estado");
+  return {};
+}
+
+// ---------------------------------------------------------------
+// Encerrar e reabrir evento
+// ---------------------------------------------------------------
+
+export async function encerrarEvento(eventoId: string): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+
+  const { error } = await sessao.supabase.rpc("encerrar_evento", { evento: eventoId });
+  if (error) return { erro: mensagemDoBanco(error) };
+
+  revalidatePath(`/painel/evento/${eventoId}`);
+  revalidatePath("/painel");
+  await avisarEvento(eventoId, "estado"); // os celulares passam a mostrar "Este evento já terminou."
+  return {};
+}
+
+// Só o admin (a função confere no banco).
+export async function reabrirEvento(eventoId: string): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+
+  const { error } = await sessao.supabase.rpc("reabrir_evento", { evento: eventoId });
+  if (error) return { erro: mensagemDoBanco(error) };
+
+  revalidatePath(`/painel/evento/${eventoId}`);
+  revalidatePath("/painel");
   await avisarEvento(eventoId, "estado");
   return {};
 }

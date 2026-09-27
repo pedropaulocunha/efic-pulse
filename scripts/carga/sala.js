@@ -74,15 +74,42 @@ function sortear(n) {
 
 const PALAVRAS = ["prazo", "caixa", "renda", "juros", "cadastro", "contato", "confiança", "garantia", "acordo", "renegociação"];
 
+const FRASES = [
+  "Ligamos no primeiro dia de atraso e o associado renegociou na hora.",
+  "Ouvimos o associado antes de propor o acordo.",
+  "Parcelamos respeitando a sazonalidade da safra.",
+];
+
 function valorAleatorio(atividade) {
   const c = atividade.config;
-  if (atividade.tipo === "multipla") return { opcao: sortear(c.opcoes.length) };
-  if (atividade.tipo === "escala") {
-    const passos = Math.round((c.max - c.min) / c.passo);
-    return { numero: Number((c.min + sortear(passos + 1) * c.passo).toFixed(6)) };
+  switch (atividade.tipo) {
+    case "multipla":
+      return { opcao: sortear(c.opcoes.length) };
+    case "escala": {
+      const passos = Math.round((c.max - c.min) / c.passo);
+      return { numero: Number((c.min + sortear(passos + 1) * c.passo).toFixed(6)) };
+    }
+    case "numero": {
+      const min = typeof c.min === "number" ? c.min : 0;
+      const max = typeof c.max === "number" ? c.max : 100;
+      return { numero: min + sortear(max - min + 1) };
+    }
+    case "ordenar": {
+      // Embaralha os índices dos itens.
+      const ordem = c.itens.map((_, i) => i);
+      for (let i = ordem.length - 1; i > 0; i--) {
+        const j = sortear(i + 1);
+        [ordem[i], ordem[j]] = [ordem[j], ordem[i]];
+      }
+      return { ordem };
+    }
+    case "aberta":
+      return { texto: FRASES[sortear(FRASES.length)] };
+    default: {
+      const quantas = 1 + sortear(c.max_palavras);
+      return { palavras: Array.from({ length: quantas }, () => PALAVRAS[sortear(PALAVRAS.length)]) };
+    }
   }
-  const quantas = 1 + sortear(c.max_palavras);
-  return { palavras: Array.from({ length: quantas }, () => PALAVRAS[sortear(PALAVRAS.length)]) };
 }
 
 export default function participante() {

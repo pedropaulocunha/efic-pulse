@@ -8,33 +8,59 @@ import { criarClienteServidor } from "@/utils/supabase/server";
 import {
   rotuloEstadoAtividade,
   rotuloTipo,
+  type ConfigAberta,
+  type ConfigAtividade,
   type ConfigEscala,
   type ConfigMultipla,
+  type ConfigNumero,
   type ConfigNuvem,
+  type ConfigOrdenar,
   type EstadoAtividade,
   type TipoAtividade,
 } from "@/lib/atividades";
 import { confirmarInscricao } from "../acoes";
 import BotaoNovoCodigo from "./botao-novo-codigo";
-import { BotaoCopiarLink, BotoesAtividade } from "./botoes-evento";
+import { BotaoCopiarLink, BotoesAtividade, BotaoEstadoEvento } from "./botoes-evento";
 
 type Atividade = {
   id: string;
   tipo: TipoAtividade;
   enunciado: string;
-  config: ConfigMultipla & ConfigEscala & ConfigNuvem;
+  config: ConfigAtividade;
   estado: EstadoAtividade;
+  rodada_atual: number;
 };
 
 // Resumo da configuração, numa linha.
 function resumoConfig(a: Atividade) {
-  if (a.tipo === "multipla") return a.config.opcoes.join(" · ");
-  if (a.tipo === "escala") {
-    const u = a.config.unidade ? ` ${a.config.unidade}` : "";
-    const ref = typeof a.config.referencia === "number" ? ` · referência ${a.config.referencia}${u}` : "";
-    return `De ${a.config.min} a ${a.config.max}${u}, passo ${a.config.passo}${ref}`;
+  switch (a.tipo) {
+    case "multipla":
+      return (a.config as ConfigMultipla).opcoes.join(" · ");
+    case "ordenar":
+      return (a.config as ConfigOrdenar).itens.join(" · ");
+    case "escala": {
+      const c = a.config as ConfigEscala;
+      const u = c.unidade ? ` ${c.unidade}` : "";
+      const ref = typeof c.referencia === "number" ? ` · referência ${c.referencia}${u}` : "";
+      return `De ${c.min} a ${c.max}${u}, passo ${c.passo}${ref}`;
+    }
+    case "numero": {
+      const c = a.config as ConfigNumero;
+      const u = c.unidade ? ` em ${c.unidade}` : "";
+      const limites =
+        typeof c.min === "number" || typeof c.max === "number"
+          ? `, de ${c.min ?? "…"} a ${c.max ?? "…"}`
+          : "";
+      const ref = typeof c.referencia === "number" ? ` · referência ${c.referencia}` : "";
+      return `Número${u}${limites}${ref}`;
+    }
+    case "nuvem": {
+      const n = (a.config as ConfigNuvem).max_palavras;
+      return n === 1 ? "1 palavra" : `Até ${n} palavras`;
+    }
+    case "aberta":
+      return `Texto de até ${(a.config as ConfigAberta).max_caracteres} caracteres, com aprovação`;
   }
-  return a.config.max_palavras === 1 ? "1 palavra" : `Até ${a.config.max_palavras} palavras`;
 }
 
 const corEstadoAtividade: Record<EstadoAtividade, string> = {
@@ -75,7 +101,7 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
   if (!user) redirect("/login");
 
   const supabase = await criarClienteServidor();
-  const [evento, inscricoes, atividades] = await Promise.all([
+  const [evento, inscricoes, atividades, perfil] = await Promise.all([
     supabase
       .from("eventos")
       .select(
@@ -90,13 +116,15 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
       .returns<Inscrito[]>(),
     supabase
       .from("atividades")
-      .select("id, tipo, enunciado, config, estado")
+      .select("id, tipo, enunciado, config, estado, rodada_atual")
       .eq("evento_id", id)
       .order("ordem")
       .order("id")
       .returns<Atividade[]>(),
+    supabase.from("perfis").select("papel").eq("id", user.id).maybeSingle(),
   ]);
-  if (evento.error || inscricoes.error || atividades.error) return <AvisoErroConexao />;
+  if (evento.error || inscricoes.error || atividades.error || perfil.error) return <AvisoErroConexao />;
+  const ehAdmin = perfil.data?.papel === "admin";
   if (!evento.data) notFound();
 
   const e = evento.data;
@@ -134,9 +162,12 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
               Código interno {e.codigo_interno} · {rotuloEstado[e.estado]}
             </p>
           </div>
-          <Link href={`/painel/evento/${e.id}/editar`} className={estiloBotaoSecundario}>
-            Editar evento
-          </Link>
+          <div className="flex flex-wrap items-start gap-3">
+            <Link href={`/painel/evento/${e.id}/editar`} className={estiloBotaoSecundario}>
+              Editar evento
+            </Link>
+            <BotaoEstadoEvento eventoId={e.id} encerrado={e.estado === "encerrado"} podeReabrir={ehAdmin} />
+          </div>
         </div>
 
         <section className="mt-8 flex flex-wrap items-center justify-between gap-6 rounded-2xl border border-slate-200 bg-white p-6">
@@ -193,6 +224,7 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={`rounded-full px-3 py-1 text-sm ${corEstadoAtividade[a.estado]}`}>
                       {rotuloEstadoAtividade[a.estado]}
+                      {a.rodada_atual > 1 ? ` · rodada ${a.rodada_atual}` : ""}
                     </span>
                     {a.estado === "fechada" && (
                       <Link

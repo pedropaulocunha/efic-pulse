@@ -2,10 +2,61 @@
 
 import { useState } from "react";
 import { Marca } from "@/components/marca";
-import { BarrasMultipla, HistogramaEscala, NuvemPalavras } from "@/components/resultado-telao";
+import {
+  BarrasMultipla,
+  HistogramaNumerico,
+  LegendaRodadas,
+  MuralAbertas,
+  NuvemPalavras,
+  PontosOrdenar,
+} from "@/components/resultado-telao";
 import { useEstadoAoVivo } from "@/components/use-estado-ao-vivo";
-import type { ConfigEscala, ConfigMultipla } from "@/lib/atividades";
-import type { EstadoProjecao } from "@/utils/projecao";
+import type { ConfigEscala, ConfigMultipla, ConfigNumero, ConfigOrdenar } from "@/lib/atividades";
+import type { EstadoProjecao, ResultadoAgregado } from "@/utils/projecao";
+
+type AtividadeTelao = NonNullable<EstadoProjecao["atividade"]>;
+
+// O gráfico de cada tipo; a partir da rodada 2, comparado com a rodada 1.
+function Resultado({ atividade }: { atividade: AtividadeTelao }) {
+  const r = atividade.resultado as ResultadoAgregado;
+  const antes = atividade.resultadoRodada1;
+  switch (r.tipo) {
+    case "multipla":
+      return (
+        <BarrasMultipla
+          config={atividade.config as ConfigMultipla}
+          resultado={r}
+          anterior={antes?.tipo === "multipla" ? antes : null}
+        />
+      );
+    case "ordenar":
+      return (
+        <PontosOrdenar
+          config={atividade.config as ConfigOrdenar}
+          resultado={r}
+          anterior={antes?.tipo === "ordenar" ? antes : null}
+        />
+      );
+    case "escala":
+    case "numero":
+      return (
+        <HistogramaNumerico
+          tipo={r.tipo}
+          config={atividade.config as ConfigEscala | ConfigNumero}
+          resultado={r}
+          anterior={antes?.tipo === r.tipo ? antes : null}
+        />
+      );
+    case "nuvem":
+      return r.palavras.length > 0 ? (
+        <NuvemPalavras resultado={r} />
+      ) : (
+        <p className="w-full text-center text-[2.4vw] text-slate-400">Nenhuma palavra ainda.</p>
+      );
+    case "aberta":
+      return <MuralAbertas resultado={r} />;
+  }
+}
 
 // Medidas em vw/vh: o telão ocupa a tela inteira em qualquer projetor.
 export default function Telao({
@@ -45,25 +96,26 @@ export default function Telao({
           <div className="mt-[4vh] flex min-h-0 flex-1 flex-col">
             {atividade.resultado ? (
               <div className="my-auto w-full">
-                <p className="mb-[3vh] text-[1.8vw] text-slate-500">
-                  {atividade.resultado.total === 1 ? "1 resposta" : `${atividade.resultado.total} respostas`}
+                <p className="mb-[3vh] flex flex-wrap items-center gap-x-[2vw] text-[1.8vw] text-slate-500">
+                  <span>
+                    {atividade.resultado.tipo === "aberta"
+                      ? `${atividade.resultado.aprovadas.length} no mural`
+                      : atividade.resultado.total === 1
+                        ? "1 resposta"
+                        : `${atividade.resultado.total} respostas`}
+                    {atividade.rodada > 1 ? ` · rodada ${atividade.rodada}` : ""}
+                  </span>
+                  {atividade.resultadoRodada1 && <LegendaRodadas rodada={atividade.rodada} />}
                 </p>
-                {atividade.resultado.tipo === "multipla" && (
-                  <BarrasMultipla config={atividade.config as ConfigMultipla} resultado={atividade.resultado} />
-                )}
-                {atividade.resultado.tipo === "escala" && (
-                  <HistogramaEscala config={atividade.config as ConfigEscala} resultado={atividade.resultado} />
-                )}
-                {atividade.resultado.tipo === "nuvem" &&
-                  (atividade.resultado.palavras.length > 0 ? (
-                    <NuvemPalavras resultado={atividade.resultado} />
-                  ) : (
-                    <p className="w-full text-center text-[2.4vw] text-slate-400">Nenhuma palavra ainda.</p>
-                  ))}
+                <Resultado atividade={atividade} />
               </div>
             ) : (
               <p className="my-auto w-full text-center text-[3vw] text-slate-500">
-                {atividade.estado === "aberta" ? "Responda pelo celular." : "Votação encerrada."}
+                {atividade.estado === "aberta"
+                  ? atividade.rodada > 1
+                    ? `Rodada ${atividade.rodada}: responda de novo pelo celular.`
+                    : "Responda pelo celular."
+                  : "Votação encerrada."}
               </p>
             )}
           </div>

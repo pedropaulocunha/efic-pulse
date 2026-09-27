@@ -1,19 +1,30 @@
 import "server-only";
-import type { ConfigAtividade, ConfigEscala, EstadoAtividade, TipoAtividade } from "@/lib/atividades";
+import {
+  TIPOS_COM_REFERENCIA,
+  TIPOS_COM_RODADAS,
+  type ConfigAtividade,
+  type EstadoAtividade,
+  type TipoAtividade,
+} from "@/lib/atividades";
 import { criarClienteServico } from "@/utils/supabase/servico";
 
 // O que o telão mostra. Sem login: quem tem o link da projeção só vê, não comanda.
 
+type Numerico = {
+  total: number;
+  rodada: number;
+  media: number | null;
+  mediana: number | null;
+  histograma: { valor: number; n: number }[];
+};
+
 export type ResultadoAgregado =
-  | { tipo: "multipla"; total: number; contagem: number[] }
-  | {
-      tipo: "escala";
-      total: number;
-      media: number | null;
-      mediana: number | null;
-      histograma: { valor: number; n: number }[];
-    }
-  | { tipo: "nuvem"; total: number; palavras: { palavra: string; n: number }[] };
+  | { tipo: "multipla"; total: number; rodada: number; contagem: number[] }
+  | ({ tipo: "escala" } & Numerico)
+  | ({ tipo: "numero" } & Numerico)
+  | { tipo: "ordenar"; total: number; rodada: number; pontos: number[] }
+  | { tipo: "nuvem"; total: number; rodada: number; palavras: { palavra: string; chave: string; n: number }[] }
+  | { tipo: "aberta"; total: number; rodada: number; aprovadas: string[]; pendentes: number };
 
 export type EstadoProjecao = {
   evento: { id: string; nomeTurma: string; cooperativa: string | null; codigoAcesso: string };
@@ -22,9 +33,12 @@ export type EstadoProjecao = {
     id: string;
     tipo: TipoAtividade;
     enunciado: string;
-    config: ConfigAtividade; // na escala, a referência só vem depois de revelada
+    config: ConfigAtividade; // a referência só vem depois de revelada
     estado: EstadoAtividade;
+    rodada: number;
     resultado: ResultadoAgregado | null; // só quando o instrutor mostra
+    // A partir da rodada 2: o resultado da rodada 1, para comparar.
+    resultadoRodada1: ResultadoAgregado | null;
   } | null;
 };
 
@@ -52,7 +66,7 @@ export async function estadoProjecao(token: string): Promise<EstadoProjecao | nu
 
   const atividade = await db
     .from("atividades")
-    .select("id, tipo, enunciado, config, estado, resultado_visivel, referencia_revelada")
+    .select("id, tipo, enunciado, config, estado, resultado_visivel, referencia_revelada, rodada_atual")
     .eq("id", e.atividade_atual_id)
     .single();
   if (atividade.error) throw atividade.error;
@@ -62,21 +76,37 @@ export async function estadoProjecao(token: string): Promise<EstadoProjecao | nu
   if (a.estado !== "aberta" && !a.resultado_visivel) return base;
 
   let config = a.config as ConfigAtividade;
-  if (a.tipo === "escala" && !a.referencia_revelada) {
-    const semReferencia: ConfigEscala = { ...(config as ConfigEscala) };
+  if (TIPOS_COM_REFERENCIA.includes(a.tipo) && !a.referencia_revelada) {
+    const semReferencia = { ...(config as { referencia?: number | null }) };
     delete semReferencia.referencia;
-    config = semReferencia;
+    config = semReferencia as ConfigAtividade;
   }
 
   let resultado: ResultadoAgregado | null = null;
+  let resultadoRodada1: ResultadoAgregado | null = null;
   if (a.resultado_visivel) {
-    const r = await db.rpc("resultado_atividade", { atividade: a.id });
-    if (r.error) throw r.error;
-    resultado = r.data as ResultadoAgregado;
+    const comparar = a.rodada_atual > 1 && TIPOS_COM_RODADAS.includes(a.tipo);
+    const [atual, primeira] = await Promise.all([
+      db.rpc("resultado_atividade", { atividade: a.id }),
+      comparar ? db.rpc("resultado_atividade", { atividade: a.id, rodada: 1 }) : Promise.resolve(null),
+    ]);
+    if (atual.error) throw atual.error;
+    if (primeira?.error) throw primeira.error;
+    resultado = atual.data as ResultadoAgregado;
+    resultadoRodada1 = (primeira?.data as ResultadoAgregado) ?? null;
   }
 
   return {
     ...base,
-    atividade: { id: a.id, tipo: a.tipo, enunciado: a.enunciado, config, estado: a.estado, resultado },
+    atividade: {
+      id: a.id,
+      tipo: a.tipo,
+      enunciado: a.enunciado,
+      config,
+      estado: a.estado,
+      rodada: a.rodada_atual,
+      resultado,
+      resultadoRodada1,
+    },
   };
 }

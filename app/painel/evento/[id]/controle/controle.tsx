@@ -9,13 +9,19 @@ import {
   formatarNumero,
   rotuloEstadoAtividade,
   rotuloTipo,
+  TIPOS_COM_REFERENCIA,
+  TIPOS_COM_RODADAS,
+  type ConfigAberta,
   type ConfigEscala,
   type ConfigMultipla,
+  type ConfigNumero,
   type ConfigNuvem,
+  type ConfigOrdenar,
   type EstadoAtividade,
 } from "@/lib/atividades";
 import type { AtividadeControle, EstadoControle } from "@/utils/controle";
 import { comandarAtividade, type Comando } from "../../acoes-atividades";
+import PainelModeracao from "./moderacao";
 
 const corEstado: Record<EstadoAtividade, string> = {
   fechada: "bg-slate-100 text-slate-600",
@@ -24,29 +30,45 @@ const corEstado: Record<EstadoAtividade, string> = {
 };
 
 function resumo(a: AtividadeControle) {
-  if (a.tipo === "multipla") return (a.config as ConfigMultipla).opcoes.join(" · ");
-  if (a.tipo === "escala") {
-    const c = a.config as ConfigEscala;
-    return `De ${formatarNumero(c.min, c.unidade)} a ${formatarNumero(c.max, c.unidade)}, passo ${c.passo}`;
+  switch (a.tipo) {
+    case "multipla":
+      return (a.config as ConfigMultipla).opcoes.join(" · ");
+    case "ordenar":
+      return (a.config as ConfigOrdenar).itens.join(" · ");
+    case "escala": {
+      const c = a.config as ConfigEscala;
+      return `De ${formatarNumero(c.min, c.unidade)} a ${formatarNumero(c.max, c.unidade)}, passo ${c.passo}`;
+    }
+    case "numero": {
+      const c = a.config as ConfigNumero;
+      return c.unidade ? `Número em ${c.unidade}` : "Número digitado pela pessoa";
+    }
+    case "nuvem": {
+      const n = (a.config as ConfigNuvem).max_palavras;
+      return n === 1 ? "1 palavra por pessoa" : `Até ${n} palavras por pessoa`;
+    }
+    case "aberta":
+      return `Texto de até ${(a.config as ConfigAberta).max_caracteres} caracteres; aprove no quadro abaixo`;
   }
-  const n = (a.config as ConfigNuvem).max_palavras;
-  return n === 1 ? "1 palavra por pessoa" : `Até ${n} palavras por pessoa`;
 }
 
 export default function Controle({ inicial }: { inicial: EstadoControle }) {
   const router = useRouter();
   const eventoId = inicial.evento.id;
-  const { dados, semConexao, recarregar } = useEstadoAoVivo<EstadoControle>(
-    `/api/painel/evento/${eventoId}/controle`,
-    eventoId,
-    inicial,
-    { ouvirRespostas: true, aoPerderSessao: () => router.replace("/login") },
-  );
-  const { evento, atividades, inscritos } = dados;
 
   const [selecionadaId, setSelecionadaId] = useState<string | null>(
     inicial.evento.atividadeAtualId ?? inicial.atividades[0]?.id ?? null,
   );
+
+  // A atividade selecionada vem com os dados de moderação (nuvem e abertas).
+  const { dados, semConexao, recarregar } = useEstadoAoVivo<EstadoControle>(
+    `/api/painel/evento/${eventoId}/controle${selecionadaId ? `?moderar=${selecionadaId}` : ""}`,
+    eventoId,
+    inicial,
+    { ouvirRespostas: true, aoPerderSessao: () => router.replace("/login") },
+  );
+  const { evento, atividades, inscritos, moderacao } = dados;
+
   const selecionada = atividades.find((a) => a.id === selecionadaId) ?? atividades[0] ?? null;
   const aberta = atividades.find((a) => a.estado === "aberta") ?? null;
 
@@ -129,6 +151,11 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
                   <span className={`rounded-full px-2.5 py-0.5 ${corEstado[selecionada.estado]}`}>
                     {rotuloEstadoAtividade[selecionada.estado]}
                   </span>
+                  {selecionada.rodada_atual > 1 && (
+                    <span className="rounded-full bg-violet-100 px-2.5 py-0.5 text-violet-800">
+                      Rodada {selecionada.rodada_atual}
+                    </span>
+                  )}
                 </div>
                 <h1 className="mt-2 text-2xl font-semibold leading-snug">{selecionada.enunciado}</h1>
                 <p className="mt-1 text-slate-500">{resumo(selecionada)}</p>
@@ -137,6 +164,7 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
                   {selecionada.respostas}
                   <span className="ml-2 text-lg font-normal text-slate-500">
                     {selecionada.respostas === 1 ? "resposta" : "respostas"} de {inscritos} inscritos
+                    {selecionada.rodada_atual > 1 ? ` nesta rodada` : ""}
                   </span>
                 </p>
 
@@ -149,6 +177,10 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
                 />
                 {erro && <p className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-red-800">{erro}</p>}
               </div>
+
+              {moderacao && moderacao.atividadeId === selecionada.id && (
+                <PainelModeracao eventoId={eventoId} moderacao={moderacao} aoMudar={recarregar} />
+              )}
 
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="mb-2 flex items-center justify-between text-sm text-slate-500">
@@ -186,9 +218,18 @@ function BotoesComando({
   const secundario = `${estilo} border-2 border-slate-300 bg-white text-slate-800 hover:bg-slate-50`;
 
   const temReferencia =
-    atividade.tipo === "escala" && typeof (atividade.config as ConfigEscala).referencia === "number";
+    TIPOS_COM_REFERENCIA.includes(atividade.tipo) &&
+    typeof (atividade.config as ConfigEscala | ConfigNumero).referencia === "number";
+  const temRodadas = TIPOS_COM_RODADAS.includes(atividade.tipo) && atividade.estado !== "fechada";
   const resultadoNoTelao = noTelao && atividade.resultado_visivel;
   const referenciaNoTelao = noTelao && atividade.referencia_revelada;
+
+  function novaRodada() {
+    const confirmar = window.confirm(
+      `Começar a rodada ${atividade.rodada_atual + 1}?\n\nA pergunta abre de novo nos celulares, do zero. As respostas da rodada ${atividade.rodada_atual} ficam guardadas, e o telão compara a rodada 1 com a nova quando você mostrar o resultado.`,
+    );
+    if (confirmar) aoComandar("nova_rodada");
+  }
 
   return (
     <div className="mt-6 space-y-3">
@@ -218,6 +259,11 @@ function BotoesComando({
             className={`${secundario} sm:col-span-2`}
           >
             {referenciaNoTelao ? "Esconder referência" : "Revelar referência"}
+          </button>
+        )}
+        {temRodadas && (
+          <button type="button" disabled={ocupado} onClick={novaRodada} className={`${secundario} sm:col-span-2`}>
+            Nova rodada ({atividade.rodada_atual + 1}ª)
           </button>
         )}
       </div>

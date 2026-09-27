@@ -17,6 +17,7 @@ export type EstadoSala = {
     enunciado: string;
     config: ConfigAtividade;
     estado: Exclude<EstadoAtividade, "fechada">;
+    rodada: number;
   } | null;
   resposta: ValorResposta | null; // a resposta que ele já enviou, se a votação estiver aberta
 };

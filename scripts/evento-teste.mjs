@@ -1,5 +1,5 @@
 // Evento de teste de carga: 40 inscritos fictícios (teste01@pulse.teste a teste40@pulse.teste)
-// e três atividades (uma de cada tipo).
+// e seis atividades (uma de cada tipo).
 //
 // No PowerShell, dentro da pasta do projeto:
 //   node --env-file=.env.local scripts/evento-teste.mjs criar
@@ -88,10 +88,31 @@ async function criar() {
       enunciado: "Em até três palavras: o que trava a cobrança?",
       config: { max_palavras: 3 },
     },
+    {
+      evento_id: evento.data.id,
+      ordem: 4,
+      tipo: "ordenar",
+      enunciado: "Ordene as etapas da cobrança, da primeira à última.",
+      config: { itens: ["Contato amigável", "Negociação", "Acordo formal", "Cobrança judicial"] },
+    },
+    {
+      evento_id: evento.data.id,
+      ordem: 5,
+      tipo: "numero",
+      enunciado: "Em quantos dias de atraso vocês fazem o primeiro contato?",
+      config: { casas: 0, unidade: "dias", min: 0, max: 120, referencia: 5 },
+    },
+    {
+      evento_id: evento.data.id,
+      ordem: 6,
+      tipo: "aberta",
+      enunciado: "Conte, em uma frase, um caso de renegociação que deu certo.",
+      config: { max_caracteres: 280 },
+    },
   ]);
   if (atividades.error) falhar("criar atividades", atividades.error);
 
-  console.log(`Evento de teste criado com ${TOTAL} inscritos e 3 atividades.`);
+  console.log(`Evento de teste criado com ${TOTAL} inscritos e 6 atividades.`);
   mostrar(evento.data);
 }
 

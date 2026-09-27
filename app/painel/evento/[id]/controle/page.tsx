@@ -16,7 +16,10 @@ export default async function PaginaControle({ params }: PageProps<"/painel/even
 
   let inicial: EstadoControle | null;
   try {
-    inicial = await estadoControle(await criarClienteServidor(), id);
+    const supabase = await criarClienteServidor();
+    // A atividade que está no telão já chega com a moderação, se for nuvem ou aberta.
+    const atual = await supabase.from("eventos").select("atividade_atual_id").eq("id", id).maybeSingle();
+    inicial = await estadoControle(supabase, id, atual.data?.atividade_atual_id ?? null);
   } catch {
     return <AvisoErroConexao />;
   }
