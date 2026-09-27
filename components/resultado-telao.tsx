@@ -111,7 +111,7 @@ export function BarrasMultipla({
 }
 
 // ---------------------------------------------------------------
-// Ordenar: itens do mais pontuado para o menos (1º lugar vale mais)
+// Ordenar: itens em ordem (1º lugar vale mais na conta, mas o telão não mostra os pontos)
 // ---------------------------------------------------------------
 
 export function PontosOrdenar({
@@ -135,9 +135,15 @@ export function PontosOrdenar({
       )
     : null;
 
+  // Sem número de pontos: a posição já diz a ordem. A barra mostra a distância entre
+  // as posições (folga ou quase empate). Na comparação, a posição da rodada 1 ao lado.
   return (
     // Uma grade só para todas as linhas: as trilhas das barras ficam alinhadas.
-    <div className="grid w-full grid-cols-[4vw_minmax(0,30%)_1fr_auto] items-center gap-x-[1.5vw] gap-y-[2vh]">
+    <div
+      className={`grid w-full items-center gap-x-[1.5vw] gap-y-[2vh] ${
+        posicaoAntes ? "grid-cols-[4vw_minmax(0,30%)_1fr_auto]" : "grid-cols-[4vw_minmax(0,30%)_1fr]"
+      }`}
+    >
       {ordem.map((i, pos) => {
         const pts = resultado.pontos[i] ?? 0;
         const antes = anterior?.pontos[i];
@@ -150,12 +156,11 @@ export function PontosOrdenar({
               fracaoAntes={antes === undefined ? undefined : antes / maior}
               cor={corDaOpcao(i)}
             />
-            <span className="min-w-[12vw] whitespace-nowrap text-right text-[2.4vw] tabular-nums text-slate-900">
-              {pts} pts
-              {posicaoAntes && (
-                <span className="ml-[0.6vw] text-[1.6vw] text-slate-500">(antes {posicaoAntes.get(i)}º)</span>
-              )}
-            </span>
+            {posicaoAntes && (
+              <span className="whitespace-nowrap text-right text-[1.6vw] text-slate-500">
+                (antes {posicaoAntes.get(i)}º)
+              </span>
+            )}
           </div>
         );
       })}

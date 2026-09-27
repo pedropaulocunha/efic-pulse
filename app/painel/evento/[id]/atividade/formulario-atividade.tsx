@@ -233,7 +233,7 @@ export default function FormularioAtividade({
         <fieldset className="space-y-3">
           <legend className="text-sm font-medium text-slate-700">Itens para ordenar (de 3 a 6)</legend>
           <p className="text-sm text-slate-500">
-            No celular, a pessoa toca os itens na ordem que preferir. No telão, o 1º lugar vale mais pontos.
+            No celular, a pessoa toca os itens na ordem que preferir. No telão, os itens aparecem na ordem da turma.
           </p>
           {itens.map((o, i) => (
             <div key={i} className="flex gap-2">
