@@ -44,7 +44,7 @@ Nos identificadores de código e nomes de tabela, use os mesmos termos em portug
 
 - **Logo:** "Efic" em IBM Plex Serif negrito, traço fino vertical, "Pulse" em IBM Plex Sans normal azul-acinzentado (`#5b82ad`). Sempre pelo componente `components/marca.tsx`.
 - **Telão:** cores dos resultados em `lib/paleta.ts`, seis cores em ordem fixa (a opção 1 é sempre petróleo, a 2 sempre coral…), validadas para daltonismo. Não reordene nem troque cor sem passar de novo no validador de paleta.
-- **Rodapé do telão:** endereço e código à esquerda, logo à direita, na mesma altura.
+- **Telão:** pergunta em IBM Plex Serif, azul-petróleo escuro (`#0f4c64`), com linha fina embaixo, e sempre o maior texto da tela. Rodapé discreto e na mesma altura: código à esquerda, quantidade de respostas no centro, logo à direita (sem o endereço). Escala e número: média em violeta (linha cheia), mediana em quase-preto (tracejada), referência em coral. Ordenar sem pontuação.
 
 ## Especificação
 
