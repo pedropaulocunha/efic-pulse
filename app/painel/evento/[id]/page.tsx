@@ -198,6 +198,10 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
             Abrir projeção
           </Link>
           <BotaoCopiarLink caminho={`/projecao/${e.projecao_token}`} />
+          {/* Arquivo para baixar: link comum, não Link do Next. */}
+          <a href={`/painel/evento/${e.id}/relatorio`} className={estiloBotaoSecundario}>
+            Baixar relatório (Excel)
+          </a>
         </section>
 
         <section id="atividades" className="mt-10 scroll-mt-6">

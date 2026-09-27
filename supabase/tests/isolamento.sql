@@ -521,6 +521,19 @@ begin
     raise exception 'FALHOU: instrutor A lê o resultado do evento do B';
   end if;
 
+  -- Relatório (0025): respostas do próprio evento, com número anônimo e sem
+  -- identificar ninguém; nada do evento do B.
+  if jsonb_array_length(public.relatorio_respostas('00000000-0000-4000-c000-00000000000a')) <> 1
+     or (public.relatorio_respostas('00000000-0000-4000-c000-00000000000a') -> 0 ->> 'participante') <> '1' then
+    raise exception 'FALHOU: instrutor A não lê o relatório do próprio evento';
+  end if;
+  if public.relatorio_respostas('00000000-0000-4000-c000-00000000000a')::text ~* 'inscricao|pessoa|email|nome' then
+    raise exception 'FALHOU: relatório expõe quem respondeu';
+  end if;
+  if public.relatorio_respostas('00000000-0000-4000-c000-00000000000b') is not null then
+    raise exception 'FALHOU: instrutor A lê o relatório do evento do B';
+  end if;
+
   -- Fatia 3: não modera nem lê as respostas abertas do evento do B.
   if public.respostas_abertas('00000000-0000-4000-e000-0000000000b2') is not null then
     raise exception 'FALHOU: instrutor A lê respostas abertas do evento do B';
@@ -795,6 +808,12 @@ begin
   begin
     perform public.sala_estado(repeat('a', 64));
     raise exception 'FALHOU: visitante sem login executa sala_estado';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.relatorio_respostas('00000000-0000-4000-c000-00000000000a');
+    raise exception 'FALHOU: visitante sem login lê o relatório';
   exception when insufficient_privilege then
     null;
   end;
