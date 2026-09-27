@@ -131,20 +131,17 @@ export default function Telao({
         </div>
       )}
 
-      {/* Rodapé fixo: endereço e código à esquerda, logo à direita, na mesma altura.
+      {/* Rodapé fixo: código à esquerda, logo à direita, na mesma altura e discretos.
           Na tela de espera o código já está grande no centro, então não se repete. */}
       <div className="absolute inset-x-[4vw] bottom-[4vh] flex items-center justify-between">
         {atividade ? (
-          <p className="flex items-center gap-[1.2vw] leading-none">
-            <span className="text-[1.4vw] text-slate-500">{endereco}</span>
-            <span className="font-mono text-[2.4vw] font-semibold tracking-[0.12em] text-slate-900">
-              {evento.codigoAcesso}
-            </span>
-          </p>
+          <span className="font-mono text-[1.2vw] font-semibold leading-none tracking-[0.12em] text-slate-900">
+            {evento.codigoAcesso}
+          </span>
         ) : (
           <span />
         )}
-        <Marca className="text-[2.4vw]" />
+        <Marca className="text-[1.2vw]" />
       </div>
 
       {semConexao && (
