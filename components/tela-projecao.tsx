@@ -73,7 +73,7 @@ function Resultado({ atividade }: { atividade: AtividadeTelao }) {
       return r.palavras.length > 0 ? (
         <NuvemPalavras resultado={r} />
       ) : (
-        <p className="w-full text-center text-[2.4cqw] text-slate-400">Nenhuma palavra ainda.</p>
+        <p className="my-auto w-full text-center text-[2.4cqw] text-slate-400">Nenhuma palavra ainda.</p>
       );
     case "aberta":
       return <MuralAbertas resultado={r} />;
@@ -109,7 +109,12 @@ export function TelaProjecao({
             {/* my-auto centraliza quando cabe e nunca sobe por cima da pergunta quando não cabe. */}
             <div className="mt-[4cqh] flex min-h-0 flex-1 flex-col">
               {atividade.resultado ? (
-                <div className="my-auto w-full">
+                // A nuvem ocupa todo o espaço livre (e se ajusta a ele); os outros gráficos centralizam.
+                <div
+                  className={
+                    atividade.resultado.tipo === "nuvem" ? "flex min-h-0 w-full flex-1 flex-col" : "my-auto w-full"
+                  }
+                >
                   {atividade.resultadoRodada1 && (
                     <p className="mb-[3cqh]">
                       <LegendaRodadas rodada={atividade.rodada} />

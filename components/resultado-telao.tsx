@@ -1,3 +1,7 @@
+"use client";
+
+import { useLayoutEffect, useRef } from "react";
+
 // Gráficos do telão: barras (múltipla escolha), pontos (ordenar), histograma
 // (escala e número), nuvem de palavras e mural (respostas abertas).
 // Tela para projetar, sem interação: os números importantes vão escritos ao lado do gráfico.
@@ -446,40 +450,83 @@ function estiloDaPalavra(chave: string) {
 }
 
 export function NuvemPalavras({ resultado }: { resultado: Resultado<"nuvem"> }) {
+  const caixa = useRef<HTMLDivElement>(null);
+  const nuvem = useRef<HTMLDivElement>(null);
   const palavras = resultado.palavras.slice(0, 60);
+  const assinatura = palavras.map((p) => `${p.chave}:${p.n}`).join("|");
+
+  // Cabe na tela: começa no tamanho cheio e encolhe (--escala) até caber no espaço
+  // entre a pergunta e o rodapé. Se nem no menor tamanho legível couber, esconde as
+  // menos citadas. Mexe só no estilo (sem estado), a cada resultado novo e a cada
+  // mudança de tamanho da tela.
+  useLayoutEffect(() => {
+    const c = caixa.current;
+    const n = nuvem.current;
+    if (!c || !n) return;
+    const ajustar = () => {
+      const itens = [...n.querySelectorAll<HTMLElement>("[data-posicao]")];
+      for (const el of itens) el.style.display = "";
+      const transborda = () => n.scrollHeight > c.clientHeight + 1 || n.scrollWidth > c.clientWidth + 1;
+      let escala = 1;
+      c.style.setProperty("--escala", "1");
+      while (transborda() && escala > 0.45) {
+        escala *= 0.92;
+        c.style.setProperty("--escala", String(escala));
+      }
+      // Ainda não coube: tira as menos citadas (maior posição) até caber, deixando ao menos 10.
+      const porPosicao = itens.sort((a, b) => Number(b.dataset.posicao) - Number(a.dataset.posicao));
+      for (const el of porPosicao) {
+        if (!transborda() || itens.filter((x) => x.style.display !== "none").length <= 10) break;
+        el.style.display = "none";
+      }
+    };
+    ajustar();
+    const observador = new ResizeObserver(ajustar);
+    observador.observe(c);
+    return () => observador.disconnect();
+  }, [assinatura]);
+
   if (palavras.length === 0) return null;
   const maior = palavras[0].n;
 
   // Cores distribuídas pela ordem de frequência (antes de embaralhar a posição).
   const cores = new Map(palavras.map((p) => [p.chave, corDaPalavra(p.chave)]));
+  const posicao = new Map(palavras.map((p, i) => [p.chave, i]));
 
   // Maiores no meio: alterna as palavras à direita e à esquerda da mais citada.
   const arrumadas: typeof palavras = [];
   palavras.forEach((p, i) => (i % 2 === 0 ? arrumadas.push(p) : arrumadas.unshift(p)));
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-center gap-x-[2.2cqw] gap-y-[1cqh]">
-      {arrumadas.map((p) => {
-        const peso = Math.sqrt(p.n / maior); // área proporcional à frequência
-        const estilo = estiloDaPalavra(p.chave);
-        return (
-          <span
-            key={p.chave}
-            title={`${p.palavra}: ${p.n}`}
-            className="leading-none"
-            style={{
-              fontSize: `${1.6 + peso * 5.4}cqw`,
-              fontFamily: estilo.familia,
-              // Letra fina só nas palavras grandes: pequena e fina some no projetor.
-              fontWeight: estilo.peso < 500 && peso < 0.5 ? 500 : estilo.peso,
-              fontStyle: estilo.italico ? "italic" : "normal",
-              color: cores.get(p.chave),
-            }}
-          >
-            {p.palavra}
-          </span>
-        );
-      })}
+    <div ref={caixa} className="flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden">
+      <div
+        ref={nuvem}
+        className="flex w-full flex-wrap items-center justify-center"
+        style={{ columnGap: "calc(var(--escala, 1) * 2.2cqw)", rowGap: "calc(var(--escala, 1) * 1cqh)" }}
+      >
+        {arrumadas.map((p) => {
+          const peso = Math.sqrt(p.n / maior); // área proporcional à frequência
+          const estilo = estiloDaPalavra(p.chave);
+          return (
+            <span
+              key={p.chave}
+              data-posicao={posicao.get(p.chave)}
+              title={`${p.palavra}: ${p.n}`}
+              className="max-w-full leading-none"
+              style={{
+                fontSize: `calc(var(--escala, 1) * ${1.6 + peso * 5.4}cqw)`,
+                fontFamily: estilo.familia,
+                // Letra fina só nas palavras grandes: pequena e fina some no projetor.
+                fontWeight: estilo.peso < 500 && peso < 0.5 ? 500 : estilo.peso,
+                fontStyle: estilo.italico ? "italic" : "normal",
+                color: cores.get(p.chave),
+              }}
+            >
+              {p.palavra}
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }
