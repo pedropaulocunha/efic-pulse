@@ -13,6 +13,7 @@ import {
   NuvemPalavras,
   PontosOrdenar,
   RankingSelecao,
+  TemasNuvem,
 } from "@/components/resultado-telao";
 import type { ConfigEscala, ConfigMultipla, ConfigNumero, ConfigOrdenar, ConfigSelecao } from "@/lib/atividades";
 import type { EstadoProjecao, ResultadoAgregado } from "@/utils/projecao";
@@ -70,6 +71,8 @@ function Resultado({ atividade }: { atividade: AtividadeTelao }) {
         />
       );
     case "nuvem":
+      // Temas por IA no lugar das palavras, quando o instrutor escolheu mostrá-los.
+      if (atividade.temas) return <TemasNuvem temas={atividade.temas} />;
       return r.palavras.length > 0 ? (
         <NuvemPalavras resultado={r} />
       ) : (
@@ -112,7 +115,7 @@ export function TelaProjecao({
                 // A nuvem ocupa todo o espaço livre (e se ajusta a ele); os outros gráficos centralizam.
                 <div
                   className={
-                    atividade.resultado.tipo === "nuvem" ? "flex min-h-0 w-full flex-1 flex-col" : "my-auto w-full"
+                    atividade.resultado.tipo === "nuvem" && !atividade.temas ? "flex min-h-0 w-full flex-1 flex-col" : "my-auto w-full"
                   }
                 >
                   {atividade.resultadoRodada1 && (

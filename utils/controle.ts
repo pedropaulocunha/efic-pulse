@@ -8,7 +8,8 @@ import {
   type TipoAtividade,
 } from "@/lib/atividades";
 import { ordenarPorBloco, type Bloco } from "@/lib/blocos";
-import type { EstadoProjecao, ResultadoAgregado } from "@/utils/projecao";
+import { iaConfigurada } from "@/utils/ia";
+import type { EstadoProjecao, ResultadoAgregado, ResultadoTemas } from "@/utils/projecao";
 
 // O que o controle do instrutor mostra. Usa o login do instrutor: as políticas
 // garantem que ele só vê os próprios eventos. Das respostas, só o total (agregado)
@@ -45,6 +46,17 @@ export type Moderacao =
       respostas: { id: string; texto: string; aprovada: boolean | null }[];
     };
 
+// Temas da nuvem por IA da atividade selecionada (rodada atual).
+export type TemasControle = {
+  atividadeId: string;
+  rodada: number;
+  noTelao: boolean;
+  geradoEm: string;
+  lista: { titulo: string; chaves: string[] }[]; // como guardado (para mover e renomear)
+  resultado: ResultadoTemas | null; // pessoas por tema, contadas pelo banco
+  novas: number; // palavras que chegaram depois do resumo (estão em Outros)
+};
+
 export type EstadoControle = {
   evento: {
     id: string;
@@ -59,7 +71,40 @@ export type EstadoControle = {
   atividades: AtividadeControle[]; // na ordem da tela (blocos)
   moderacao: Moderacao | null;
   previa: EstadoProjecao["atividade"];
+  temas: TemasControle | null;
+  iaConfigurada: boolean;
 };
+
+async function temasDa(
+  supabase: SupabaseClient,
+  atividade: AtividadeControle | undefined,
+  resultado: ResultadoAgregado | null,
+): Promise<TemasControle | null> {
+  if (!atividade || atividade.tipo !== "nuvem" || atividade.estado === "fechada") return null;
+  const guardados = await supabase
+    .from("temas_nuvem")
+    .select("temas, no_telao, gerado_em")
+    .eq("atividade_id", atividade.id)
+    .eq("rodada", atividade.rodada_atual)
+    .maybeSingle();
+  if (guardados.error) throw guardados.error;
+  if (!guardados.data) return null;
+
+  const r = await supabase.rpc("resultado_temas", { atividade: atividade.id });
+  if (r.error) throw r.error;
+  const lista = guardados.data.temas as TemasControle["lista"];
+  const comTema = new Set(lista.flatMap((t) => t.chaves));
+  const palavras = resultado?.tipo === "nuvem" ? resultado.palavras : [];
+  return {
+    atividadeId: atividade.id,
+    rodada: atividade.rodada_atual,
+    noTelao: guardados.data.no_telao,
+    geradoEm: guardados.data.gerado_em,
+    lista,
+    resultado: (r.data as ResultadoTemas) ?? null,
+    novas: palavras.filter((p) => !comTema.has(p.chave)).length,
+  };
+}
 
 async function moderacaoDa(
   supabase: SupabaseClient,
@@ -168,10 +213,13 @@ export async function estadoControle(
   const indice = selecionadaId ? lista.findIndex((a) => a.id === selecionadaId) : lista.length > 0 ? 0 : -1;
   const selecionada = indice >= 0 ? lista[indice] : undefined;
   const resultado = indice >= 0 ? resultados[indice] : null;
-  const [moderacao, previa] = await Promise.all([
+  const [moderacao, previa, temas] = await Promise.all([
     moderacaoDa(supabase, selecionada, resultado),
     previaDa(supabase, selecionada, resultado),
+    temasDa(supabase, selecionada, resultado),
   ]);
+  // A prévia mostra os temas quando é isso que o telão mostra.
+  if (previa && temas?.noTelao) previa.temas = temas.resultado;
   const cooperativa = evento.data.cooperativa as unknown as { nome: string } | null;
 
   return {
@@ -188,5 +236,7 @@ export async function estadoControle(
     atividades: lista,
     moderacao,
     previa,
+    temas,
+    iaConfigurada: iaConfigurada(),
   };
 }

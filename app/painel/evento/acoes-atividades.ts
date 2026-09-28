@@ -6,6 +6,7 @@ import { TIPOS, validarConfig, type TipoAtividade } from "@/lib/atividades";
 import { textoLimpo, uuidValido } from "@/lib/formatos";
 import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
+import { sugerirTemas } from "@/utils/ia";
 import { avisarEvento } from "@/utils/tempo-real";
 
 // Todas as ações usam o login do instrutor: as políticas do banco (RLS)
@@ -392,6 +393,143 @@ export async function reabrirEvento(eventoId: string): Promise<{ erro?: string }
 
   revalidatePath(`/painel/evento/${eventoId}`);
   revalidatePath("/painel");
+  await avisarEvento(eventoId, "estado");
+  return {};
+}
+
+// ---------------------------------------------------------------
+// Temas da nuvem por IA (docs/ia-temas-nuvem.md, migração 0031).
+// A IA sugere os temas; o instrutor ajusta e decide se vão ao telão.
+// ---------------------------------------------------------------
+
+type TemasGuardados = { titulo: string; chaves: string[] }[];
+
+async function lerTemas(supabase: Cliente, atividadeId: string, rodada: number) {
+  const r = await supabase
+    .from("temas_nuvem")
+    .select("temas")
+    .eq("atividade_id", atividadeId)
+    .eq("rodada", rodada)
+    .maybeSingle();
+  if (r.error) return { erro: SEM_CONEXAO } as const;
+  if (!r.data) return { erro: "Gere os temas primeiro." } as const;
+  return { temas: r.data.temas as TemasGuardados } as const;
+}
+
+async function gravarTemas(supabase: Cliente, atividadeId: string, rodada: number, temas: TemasGuardados) {
+  const r = await supabase
+    .from("temas_nuvem")
+    .update({ temas })
+    .eq("atividade_id", atividadeId)
+    .eq("rodada", rodada)
+    .select("atividade_id");
+  return !r.error && r.data.length > 0;
+}
+
+export async function gerarTemas(eventoId: string, atividadeId: string): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const { supabase } = sessao;
+
+  const atividade = await supabase
+    .from("atividades")
+    .select("tipo, enunciado, rodada_atual")
+    .eq("id", atividadeId)
+    .eq("evento_id", eventoId)
+    .maybeSingle();
+  if (atividade.error) return { erro: SEM_CONEXAO };
+  if (!atividade.data || atividade.data.tipo !== "nuvem") return { erro: "Só a nuvem de palavras tem temas." };
+
+  // As palavras como a nuvem mostra: juntadas por acento/plural, sem as ocultas.
+  const nuvem = await supabase.rpc("resultado_atividade", { atividade: atividadeId });
+  if (nuvem.error) return { erro: SEM_CONEXAO };
+  const palavras = (nuvem.data?.palavras ?? []) as { palavra: string; chave: string; n: number }[];
+  if (palavras.length < 3) return { erro: "Poucas palavras para resumir: espere mais respostas." };
+
+  const sugestao = await sugerirTemas(atividade.data.enunciado, palavras);
+  if ("erro" in sugestao) return { erro: sugestao.erro };
+
+  // Tema novo nunca vai direto ao telão: o instrutor revisa antes.
+  const gravado = await supabase.from("temas_nuvem").upsert(
+    {
+      atividade_id: atividadeId,
+      rodada: atividade.data.rodada_atual,
+      temas: sugestao.temas,
+      no_telao: false,
+      modelo: sugestao.modelo,
+      gerado_em: new Date().toISOString(),
+    },
+    { onConflict: "atividade_id,rodada" },
+  );
+  if (gravado.error) return { erro: "Não foi possível guardar os temas. Tente de novo." };
+
+  await avisarEvento(eventoId, "estado");
+  return {};
+}
+
+export async function renomearTema(
+  eventoId: string,
+  atividadeId: string,
+  rodada: number,
+  indice: number,
+  tituloBruto: string,
+): Promise<{ erro?: string }> {
+  const titulo = textoLimpo(tituloBruto, 60);
+  if (!titulo) return { erro: "Dê um nome ao tema." };
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+
+  const atual = await lerTemas(sessao.supabase, atividadeId, rodada);
+  if ("erro" in atual) return { erro: atual.erro };
+  if (!atual.temas[indice]) return { erro: "Tema não encontrado." };
+  const temas = atual.temas.map((t, i) => (i === indice ? { ...t, titulo } : t));
+  if (!(await gravarTemas(sessao.supabase, atividadeId, rodada, temas))) return { erro: "Não foi possível renomear." };
+
+  await avisarEvento(eventoId, "estado");
+  return {};
+}
+
+// destino: posição do tema (0, 1, ...) ou -1 para Outros.
+export async function moverPalavraTema(
+  eventoId: string,
+  atividadeId: string,
+  rodada: number,
+  chave: string,
+  destino: number,
+): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+
+  const atual = await lerTemas(sessao.supabase, atividadeId, rodada);
+  if ("erro" in atual) return { erro: atual.erro };
+  if (destino !== -1 && !atual.temas[destino]) return { erro: "Tema não encontrado." };
+  const temas = atual.temas.map((t, i) => ({
+    ...t,
+    chaves: i === destino ? [...t.chaves.filter((c) => c !== chave), chave] : t.chaves.filter((c) => c !== chave),
+  }));
+  if (!(await gravarTemas(sessao.supabase, atividadeId, rodada, temas))) return { erro: "Não foi possível mover." };
+
+  await avisarEvento(eventoId, "estado");
+  return {};
+}
+
+export async function mostrarTemasNoTelao(
+  eventoId: string,
+  atividadeId: string,
+  rodada: number,
+  mostrar: boolean,
+): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+
+  const r = await sessao.supabase
+    .from("temas_nuvem")
+    .update({ no_telao: mostrar })
+    .eq("atividade_id", atividadeId)
+    .eq("rodada", rodada)
+    .select("atividade_id");
+  if (r.error || r.data.length === 0) return { erro: "Não foi possível mudar o telão." };
+
   await avisarEvento(eventoId, "estado");
   return {};
 }

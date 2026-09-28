@@ -24,6 +24,7 @@ import {
 import type { AtividadeControle, EstadoControle } from "@/utils/controle";
 import { comandarAtividade, type Comando } from "../../acoes-atividades";
 import PainelModeracao from "./moderacao";
+import PainelTemas from "./temas";
 
 const corEstado: Record<EstadoAtividade, string> = {
   fechada: "bg-slate-100 text-slate-600",
@@ -74,7 +75,7 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
     inicial,
     { ouvirRespostas: true, aoPerderSessao: () => router.replace("/login") },
   );
-  const { evento, atividades, blocos, participantes, moderacao, previa } = dados;
+  const { evento, atividades, blocos, participantes, moderacao, previa, temas, iaConfigurada } = dados;
 
   const selecionada = atividades.find((a) => a.id === selecionadaId) ?? atividades[0] ?? null;
   const aberta = atividades.find((a) => a.estado === "aberta") ?? null;
@@ -197,6 +198,17 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
 
               {moderacao && moderacao.atividadeId === selecionada.id && (
                 <PainelModeracao eventoId={eventoId} moderacao={moderacao} aoMudar={recarregar} />
+              )}
+
+              {selecionada.tipo === "nuvem" && selecionada.estado !== "fechada" && (
+                <PainelTemas
+                  eventoId={eventoId}
+                  atividadeId={selecionada.id}
+                  temas={temas && temas.atividadeId === selecionada.id ? temas : null}
+                  iaConfigurada={iaConfigurada}
+                  resultadoVisivel={selecionada.resultado_visivel}
+                  aoMudar={recarregar}
+                />
               )}
 
               {previa && previa.id === selecionada.id && (

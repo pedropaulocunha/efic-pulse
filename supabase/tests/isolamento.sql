@@ -157,6 +157,10 @@ values
   ('00000000-0000-4000-e000-0000000000b1', '00000000-0000-4000-c000-00000000000b', '00000000-0000-4000-9000-0000000000b1', 1, 'nuvem',
    'Uma palavra sobre cobrança', '{"max_palavras": 3}');
 
+-- Temas por IA (0031) na nuvem do B.
+insert into public.temas_nuvem (atividade_id, rodada, temas)
+values ('00000000-0000-4000-e000-0000000000b1', 1, '[{"titulo": "Prazo", "chaves": ["prazo"]}]');
+
 -- Daqui até o bloco do instrutor A, simula o servidor (chave secreta).
 set local request.jwt.claims = '{"role":"service_role"}';
 
@@ -725,6 +729,21 @@ begin
     raise exception 'FALHOU: instrutor roda o comparativo da biblioteca';
   end if;
 
+  -- Temas por IA (0031): não lê, não cria e não vê o resultado dos temas do B.
+  if (select count(*) from public.temas_nuvem where atividade_id = '00000000-0000-4000-e000-0000000000b1') <> 0 then
+    raise exception 'FALHOU: instrutor A lê os temas da nuvem do B';
+  end if;
+  begin
+    insert into public.temas_nuvem (atividade_id, rodada, temas)
+    values ('00000000-0000-4000-e000-0000000000b1', 2, '[{"titulo": "Intruso", "chaves": []}]');
+    raise exception 'FALHOU: instrutor A criou temas na nuvem do B';
+  exception when insufficient_privilege then
+    null;
+  end;
+  if public.resultado_temas('00000000-0000-4000-e000-0000000000b1') is not null then
+    raise exception 'FALHOU: instrutor A vê o resultado dos temas do B';
+  end if;
+
   -- Não encerra o evento do B.
   begin
     perform public.encerrar_evento('00000000-0000-4000-c000-00000000000b');
@@ -855,6 +874,11 @@ begin
     raise exception 'FALHOU: admin não ajustou o texto da pergunta da biblioteca';
   end if;
 
+  -- Admin vê os temas e o resultado dos temas de qualquer evento.
+  if public.resultado_temas('00000000-0000-4000-e000-0000000000b1') is null then
+    raise exception 'FALHOU: admin não vê o resultado dos temas do B';
+  end if;
+
   -- Admin vê atividades e resultados de qualquer evento.
   if (select count(*) from public.atividades where evento_id = '00000000-0000-4000-c000-00000000000b') <> 2 then
     raise exception 'FALHOU: admin não vê as atividades do evento do B';
@@ -936,6 +960,12 @@ begin
   begin
     perform public.relatorio_respostas('00000000-0000-4000-c000-00000000000a');
     raise exception 'FALHOU: visitante sem login lê o relatório';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform 1 from public.temas_nuvem;
+    raise exception 'FALHOU: visitante sem login lê os temas da nuvem';
   exception when insufficient_privilege then
     null;
   end;

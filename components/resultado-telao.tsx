@@ -28,7 +28,7 @@ import {
   CORES_TEXTO,
   corDaPalavra,
 } from "@/lib/paleta";
-import type { ResultadoAgregado } from "@/utils/projecao";
+import type { ResultadoAgregado, ResultadoTemas } from "@/utils/projecao";
 
 type Resultado<T extends ResultadoAgregado["tipo"]> = Extract<ResultadoAgregado, { tipo: T }>;
 
@@ -527,6 +527,50 @@ export function NuvemPalavras({ resultado }: { resultado: Resultado<"nuvem"> }) 
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
+// Temas da nuvem (agrupados por IA, contados pelo banco): uma barra por tema com o
+// % das pessoas que responderam e as palavras mais citadas embaixo do título.
+// ---------------------------------------------------------------
+
+export function TemasNuvem({ temas }: { temas: ResultadoTemas }) {
+  const maior = Math.max(1, ...temas.temas.map((t) => t.pessoas));
+  const compacto = temas.temas.length > 6;
+  return (
+    <div className="w-full">
+      <div
+        className={`grid w-full grid-cols-[minmax(0,38%)_1fr_auto] items-center gap-x-[2cqw] ${compacto ? "gap-y-[1.4cqh]" : "gap-y-[2.4cqh]"}`}
+      >
+        {temas.temas.map((t) => {
+          // A cor segue o tema (posição na lista guardada); "Outros" em cinza.
+          const cor = t.indice === 0 ? "#94a3b8" : corDaOpcao(t.indice - 1);
+          const exemplos = t.palavras.slice(0, 4).map((w) => w.palavra);
+          return (
+            <div key={t.indice} className="contents">
+              <div className="min-w-0">
+                <p className={`truncate font-semibold leading-tight text-slate-900 ${compacto ? "text-[1.7cqw]" : "text-[2.1cqw]"}`}>
+                  {t.titulo}
+                </p>
+                <p className="mt-[0.4cqh] truncate text-[1.25cqw] leading-tight text-slate-500">
+                  {exemplos.join(", ")}
+                  {t.palavras.length > exemplos.length ? "…" : ""}
+                </p>
+              </div>
+              <BarraComparada fracao={t.pessoas / maior} cor={cor} compacto={compacto} />
+              <span className="min-w-[10cqw] whitespace-nowrap text-right text-[2cqw] tabular-nums text-slate-900">
+                {percentual(t.pessoas, temas.total)}%
+                <span className="ml-[0.6cqw] text-[1.3cqw] text-slate-500">({t.pessoas})</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-[2.5cqh] text-right text-[1.2cqw] text-slate-400">
+        Temas agrupados por IA · % das pessoas que responderam
+      </p>
     </div>
   );
 }
