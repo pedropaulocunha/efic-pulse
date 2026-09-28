@@ -100,11 +100,13 @@ export async function salvarPerguntaModelo(
     max_caracteres: campo("max_caracteres"),
   });
   if ("erro" in validacao) return { erro: validacao.erro };
+  // Observação opcional: aparece no celular abaixo da pergunta. Vazia = null.
+  const observacao = textoLimpo(formData.get("observacao"), 500) || null;
 
   if (perguntaId) {
     const r = await supabase
       .from("modelo_perguntas")
-      .update({ tipo, enunciado, config: validacao.config })
+      .update({ tipo, enunciado, observacao, config: validacao.config })
       .eq("id", perguntaId)
       .eq("modelo_id", modeloId)
       .select("id");
@@ -127,6 +129,7 @@ export async function salvarPerguntaModelo(
       ordem: (ultima.data?.ordem ?? 0) + 1,
       tipo,
       enunciado,
+      observacao,
       config: validacao.config,
     });
     if (criada.error) return { erro: "Não foi possível criar a pergunta. Só o admin mexe na biblioteca." };

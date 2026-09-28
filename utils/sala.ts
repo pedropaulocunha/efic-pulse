@@ -15,6 +15,7 @@ export type EstadoSala = {
     id: string;
     tipo: TipoAtividade;
     enunciado: string;
+    observacao?: string | null; // explicação opcional, abaixo da pergunta
     config: ConfigAtividade;
     estado: Exclude<EstadoAtividade, "fechada">;
     rodada: number;

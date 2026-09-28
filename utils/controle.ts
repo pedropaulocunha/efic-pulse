@@ -22,6 +22,7 @@ export type AtividadeControle = {
   bloco_id: string | null;
   tipo: TipoAtividade;
   enunciado: string;
+  observacao: string | null;
   config: ConfigAtividade;
   estado: EstadoAtividade;
   resultado_visivel: boolean;
@@ -139,7 +140,7 @@ export async function estadoControle(
       .maybeSingle(),
     supabase
       .from("atividades")
-      .select("id, ordem, bloco_id, tipo, enunciado, config, estado, resultado_visivel, referencia_revelada, rodada_atual")
+      .select("id, ordem, bloco_id, tipo, enunciado, observacao, config, estado, resultado_visivel, referencia_revelada, rodada_atual")
       .eq("evento_id", eventoId),
     supabase.from("blocos").select("id, ordem, titulo").eq("evento_id", eventoId),
     supabase.from("inscricoes").select("id", { count: "exact", head: true }).eq("evento_id", eventoId),

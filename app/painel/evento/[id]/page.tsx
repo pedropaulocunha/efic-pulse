@@ -36,6 +36,7 @@ type Atividade = {
   bloco_id: string | null;
   tipo: TipoAtividade;
   enunciado: string;
+  observacao: string | null;
   config: ConfigAtividade;
   estado: EstadoAtividade;
   rodada_atual: number;
@@ -115,7 +116,7 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
     supabase.from("inscricoes").select("id", { count: "exact", head: true }).eq("evento_id", id),
     supabase
       .from("atividades")
-      .select("id, ordem, bloco_id, tipo, enunciado, config, estado, rodada_atual, modelo_pergunta_id")
+      .select("id, ordem, bloco_id, tipo, enunciado, observacao, config, estado, rodada_atual, modelo_pergunta_id")
       .eq("evento_id", id)
       .returns<Atividade[]>(),
     supabase.from("blocos").select("id, ordem, titulo").eq("evento_id", id).returns<Bloco[]>(),
@@ -269,6 +270,9 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
                               <p className="mt-1 text-sm text-slate-500">
                                 {rotuloTipo[a.tipo]} · {resumoConfig(a)}
                               </p>
+                              {a.observacao && (
+                                <p className="mt-1 line-clamp-2 text-sm italic text-slate-500">Obs.: {a.observacao}</p>
+                              )}
                               {a.bloco_id && blocos.data.length > 1 && (
                                 <SeletorBloco
                                   eventoId={e.id}

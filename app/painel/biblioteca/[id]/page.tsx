@@ -14,7 +14,14 @@ import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
 import { BotoesModelo, BotoesPerguntaModelo, TituloModelo } from "../componentes";
 
-type Pergunta = { id: string; ordem: number; tipo: TipoAtividade; enunciado: string; config: ConfigAtividade };
+type Pergunta = {
+  id: string;
+  ordem: number;
+  tipo: TipoAtividade;
+  enunciado: string;
+  observacao: string | null;
+  config: ConfigAtividade;
+};
 
 function detalhe(p: Pergunta) {
   if (p.tipo === "multipla") return (p.config as ConfigMultipla).opcoes.join(" · ");
@@ -36,7 +43,7 @@ export default async function PaginaModelo({ params }: PageProps<"/painel/biblio
     supabase.from("modelos").select("id, titulo, arquivado").eq("id", id).maybeSingle(),
     supabase
       .from("modelo_perguntas")
-      .select("id, ordem, tipo, enunciado, config")
+      .select("id, ordem, tipo, enunciado, observacao, config")
       .eq("modelo_id", id)
       .order("ordem")
       .order("id")
@@ -124,6 +131,9 @@ export default async function PaginaModelo({ params }: PageProps<"/painel/biblio
                       {detalhe(p) ? ` · ${detalhe(p)}` : ""}
                       {usadas.has(p.id) ? " · usada em eventos" : ""}
                     </p>
+                    {p.observacao && (
+                      <p className="mt-1 line-clamp-2 text-sm italic text-slate-500">Obs.: {p.observacao}</p>
+                    )}
                   </div>
                   <BotoesPerguntaModelo
                     modeloId={m.id}

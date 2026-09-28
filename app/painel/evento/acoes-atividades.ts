@@ -72,6 +72,8 @@ export async function salvarAtividade(
     max_caracteres: campo("max_caracteres"),
   });
   if ("erro" in validacao) return { erro: validacao.erro };
+  // Observação opcional: aparece no celular abaixo da pergunta. Vazia = null.
+  const observacao = textoLimpo(formData.get("observacao"), 500) || null;
 
   // Toda atividade pertence a um bloco (0024). O banco confere que é do mesmo evento.
   const blocoId = campo("bloco");
@@ -95,7 +97,7 @@ export async function salvarAtividade(
 
     const alterada = await supabase
       .from("atividades")
-      .update({ tipo, enunciado, config: validacao.config, ...(ordem ? { bloco_id: blocoId, ordem } : {}) })
+      .update({ tipo, enunciado, observacao, config: validacao.config, ...(ordem ? { bloco_id: blocoId, ordem } : {}) })
       .eq("id", atividadeId)
       .eq("estado", "fechada")
       .select("id");
@@ -111,6 +113,7 @@ export async function salvarAtividade(
       ordem,
       tipo,
       enunciado,
+      observacao,
       config: validacao.config,
     });
     if (criada.error) return { erro: "Não foi possível criar a atividade. Tente de novo." };

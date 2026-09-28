@@ -12,6 +12,7 @@ import { salvarAtividade } from "../../../acoes-atividades";
 type Atividade = {
   tipo: TipoAtividade;
   enunciado: string;
+  observacao: string | null;
   config: ConfigAtividade;
   estado: EstadoAtividade;
   bloco_id: string | null;
@@ -33,7 +34,7 @@ export default async function EditarAtividade({
   const [atividade, blocos] = await Promise.all([
     supabase
       .from("atividades")
-      .select("tipo, enunciado, config, estado, bloco_id, modelo_pergunta_id, eventos!atividades_evento_id_fkey(nome_turma)")
+      .select("tipo, enunciado, observacao, config, estado, bloco_id, modelo_pergunta_id, eventos!atividades_evento_id_fkey(nome_turma)")
       .eq("id", atividadeId)
       .eq("evento_id", id)
       .maybeSingle<Atividade>(),

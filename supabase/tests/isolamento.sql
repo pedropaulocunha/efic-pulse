@@ -292,6 +292,19 @@ begin
     raise exception 'FALHOU: sala_estado não reconhece participante anônimo';
   end if;
 
+  -- Observação da pergunta (0028) chega ao celular.
+  update public.atividades set observacao = 'Pense no último mês.'
+   where id = '00000000-0000-4000-e000-0000000000b2';
+  if public.sala_estado(repeat('c', 64)) -> 'sala' -> 'atividade' ->> 'observacao' is distinct from 'Pense no último mês.' then
+    raise exception 'FALHOU: observação da pergunta não chega ao celular';
+  end if;
+  begin
+    update public.atividades set observacao = '   ' where id = '00000000-0000-4000-e000-0000000000b2';
+    raise exception 'FALHOU: aceitou observação em branco (deveria ser vazia = null)';
+  exception when check_violation then
+    null;
+  end;
+
   if public.sala_entrar_codigo('ZZZZ', 'ip-anonimo', repeat('d', 64)) ->> 'resultado' <> 'nao_confere' then
     raise exception 'FALHOU: código inexistente não foi recusado';
   end if;
@@ -682,6 +695,13 @@ begin
     update public.atividades set enunciado = 'Mudei a pergunta da biblioteca'
      where modelo_pergunta_id = '00000000-0000-4000-8000-0000000000f1';
     raise exception 'FALHOU: pergunta da biblioteca foi alterada no evento';
+  exception when check_violation then
+    null;
+  end;
+  begin
+    update public.atividades set observacao = 'Observação só deste evento'
+     where modelo_pergunta_id = '00000000-0000-4000-8000-0000000000f1';
+    raise exception 'FALHOU: observação de pergunta da biblioteca foi alterada no evento';
   exception when check_violation then
     null;
   end;

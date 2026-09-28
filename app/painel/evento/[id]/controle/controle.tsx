@@ -166,6 +166,9 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
                   )}
                 </div>
                 <h1 className="mt-2 text-2xl font-semibold leading-snug">{selecionada.enunciado}</h1>
+                {selecionada.observacao && (
+                  <p className="mt-1 text-slate-600">Observação: {selecionada.observacao}</p>
+                )}
                 <p className="mt-1 text-slate-500">{resumo(selecionada)}</p>
 
                 <p className="mt-5 text-4xl font-semibold tabular-nums">

@@ -160,6 +160,7 @@ function Responder({
         </p>
       )}
       <h1 className="text-2xl font-semibold leading-snug">{atividade.enunciado}</h1>
+      {atividade.observacao && <p className="mt-2 leading-relaxed text-slate-600">{atividade.observacao}</p>}
       <div className="mt-8 flex flex-1 flex-col">
         {atividade.tipo === "multipla" && <Multipla config={atividade.config as ConfigMultipla} {...props} />}
         {atividade.tipo === "escala" && <Escala config={atividade.config as ConfigEscala} {...props} />}

@@ -61,7 +61,7 @@ export default function FormularioPergunta({
 }: {
   acaoSalvar: (anterior: EstadoFormularioPergunta, formData: FormData) => Promise<EstadoFormularioPergunta>;
   voltar: string; // endereço do botão Cancelar
-  atividade?: { tipo: TipoAtividade; enunciado: string; config: ConfigAtividade };
+  atividade?: { tipo: TipoAtividade; enunciado: string; config: ConfigAtividade; observacao?: string | null };
   blocos?: Bloco[]; // sem blocos (perguntas de modelo), o campo Bloco não aparece
   blocoInicial?: string | null;
 }) {
@@ -70,6 +70,7 @@ export default function FormularioPergunta({
 
   const [tipo, setTipo] = useState<TipoAtividade>(atividade?.tipo ?? "multipla");
   const [enunciado, setEnunciado] = useState(atividade?.enunciado ?? "");
+  const [observacao, setObservacao] = useState(atividade?.observacao ?? "");
   // Toda atividade pertence a um bloco: sem indicação, vai para o primeiro.
   const [bloco, setBloco] = useState(blocoInicial ?? blocos?.[0]?.id ?? "");
 
@@ -171,6 +172,21 @@ export default function FormularioPergunta({
           maxLength={300}
           value={enunciado}
           onChange={(e) => setEnunciado(e.target.value)}
+          className={`${estiloCampo} h-auto py-3`}
+        />
+      </Campo>
+
+      <Campo
+        rotulo="Observação (opcional)"
+        dica="Aparece no celular do participante logo abaixo da pergunta, como explicação."
+      >
+        <textarea
+          name="observacao"
+          rows={2}
+          maxLength={500}
+          value={observacao}
+          onChange={(e) => setObservacao(e.target.value)}
+          placeholder="Ex.: Considere os atrasos dos últimos 3 meses."
           className={`${estiloCampo} h-auto py-3`}
         />
       </Campo>
