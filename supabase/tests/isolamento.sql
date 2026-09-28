@@ -179,6 +179,13 @@ begin
   exception when check_violation then
     null;
   end;
+  begin
+    insert into public.atividades (evento_id, bloco_id, ordem, tipo, enunciado, config)
+    values ('00000000-0000-4000-c000-00000000000a', '00000000-0000-4000-9000-0000000000a1', 9, 'nuvem', 'Seis palavras', '{"max_palavras": 6}');
+    raise exception 'FALHOU: aceitou nuvem com mais de 5 palavras';
+  exception when check_violation then
+    null;
+  end;
 
   -- Resposta para atividade que não está aberta é recusada.
   begin

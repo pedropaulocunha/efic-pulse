@@ -191,7 +191,7 @@ export function validarConfig(
   }
 
   const maxPalavras = Number(entrada.max_palavras);
-  if (![1, 2, 3].includes(maxPalavras)) return { erro: "Escolha de uma a três palavras." };
+  if (![1, 2, 3, 4, 5].includes(maxPalavras)) return { erro: "Escolha de uma a cinco palavras." };
   return { config: { max_palavras: maxPalavras } };
 }
 

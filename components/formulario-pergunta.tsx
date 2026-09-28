@@ -255,6 +255,8 @@ export default function FormularioPergunta({
             <option value="1">1 palavra</option>
             <option value="2">Até 2 palavras</option>
             <option value="3">Até 3 palavras</option>
+            <option value="4">Até 4 palavras</option>
+            <option value="5">Até 5 palavras</option>
           </select>
         </Campo>
       )}
