@@ -24,7 +24,7 @@ type Pergunta = {
 };
 
 function detalhe(p: Pergunta) {
-  if (p.tipo === "multipla") return (p.config as ConfigMultipla).opcoes.join(" · ");
+  if (p.tipo === "multipla" || p.tipo === "selecao") return (p.config as ConfigMultipla).opcoes.join(" · ");
   if (p.tipo === "ordenar") return (p.config as ConfigOrdenar).itens.join(" · ");
   return "";
 }

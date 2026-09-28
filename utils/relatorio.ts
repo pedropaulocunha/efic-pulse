@@ -78,6 +78,8 @@ export function textoResposta(p: { tipo: TipoAtividade; config: ConfigAtividade 
   switch (p.tipo) {
     case "multipla":
       return (p.config as ConfigMultipla).opcoes[valor.opcao as number] ?? "";
+    case "selecao":
+      return (valor.opcoes as number[]).map((i) => (p.config as ConfigMultipla).opcoes[i]).join(", ");
     case "escala":
     case "numero":
       return valor.numero as number;
@@ -215,6 +217,14 @@ export async function gerarRelatorio(supabase: SupabaseClient, eventoId: string)
           (p.config as ConfigMultipla).opcoes.forEach((opcao, i) =>
             linha(opcao, rs.filter((r) => r.valor.opcao === i).length),
           );
+          break;
+        }
+        case "selecao": {
+          // % das pessoas que marcaram cada opção (soma passa de 100%), da mais marcada para a menos.
+          (p.config as ConfigMultipla).opcoes
+            .map((opcao, i) => ({ opcao, n: rs.filter((r) => (r.valor.opcoes as number[]).includes(i)).length }))
+            .sort((x, y) => y.n - x.n)
+            .forEach((x) => linha(x.opcao, x.n));
           break;
         }
         case "escala":

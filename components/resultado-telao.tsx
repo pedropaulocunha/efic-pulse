@@ -12,6 +12,7 @@ import {
   type ConfigMultipla,
   type ConfigNumero,
   type ConfigOrdenar,
+  type ConfigSelecao,
 } from "@/lib/atividades";
 import {
   COR_ESCALA,
@@ -48,18 +49,31 @@ export function LegendaRodadas({ rodada }: { rodada: number }) {
 }
 
 // Barra horizontal: a da rodada 1 (se houver) em cima, fina e clara; a atual embaixo.
-function BarraComparada({ fracao, fracaoAntes, cor }: { fracao: number; fracaoAntes?: number; cor: string }) {
+// "compacto": barras mais baixas, para caber até 10 linhas (seleção múltipla).
+function BarraComparada({
+  fracao,
+  fracaoAntes,
+  cor,
+  compacto = false,
+}: {
+  fracao: number;
+  fracaoAntes?: number;
+  cor: string;
+  compacto?: boolean;
+}) {
+  const comparando = fracaoAntes !== undefined;
+  const altura = compacto ? (comparando ? "h-[2.4cqh]" : "h-[3.2cqh]") : comparando ? "h-[4cqh]" : "h-[5.5cqh]";
   return (
-    <div className="flex flex-col gap-[0.5cqh]">
+    <div className={`flex flex-col ${compacto ? "gap-[0.3cqh]" : "gap-[0.5cqh]"}`}>
       {fracaoAntes !== undefined && (
-        <div className="h-[1.6cqh] rounded-r-[4px] bg-slate-100">
+        <div className={`${compacto ? "h-[1cqh]" : "h-[1.6cqh]"} rounded-r-[4px] bg-slate-100`}>
           <div
             className="h-full rounded-r-[4px] opacity-35 transition-[width] duration-700 ease-out"
             style={{ width: `${fracaoAntes * 100}%`, backgroundColor: cor }}
           />
         </div>
       )}
-      <div className={`${fracaoAntes !== undefined ? "h-[4cqh]" : "h-[5.5cqh]"} rounded-r-[4px] bg-slate-100`}>
+      <div className={`${altura} rounded-r-[4px] bg-slate-100`}>
         <div
           className="h-full rounded-r-[4px] transition-[width] duration-700 ease-out"
           style={{ width: `${fracao * 100}%`, backgroundColor: cor }}
@@ -98,6 +112,57 @@ export function BarrasMultipla({
               cor={corDaOpcao(i)}
             />
             <span className="min-w-[10cqw] whitespace-nowrap text-right text-[2cqw] tabular-nums text-slate-900">
+              {percentual(n, resultado.total)}%
+              <span className="ml-[0.6cqw] text-[1.3cqw] text-slate-500">
+                {anterior ? `(antes ${percentual(antes ?? 0, anterior.total)}%)` : `(${n})`}
+              </span>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
+// Seleção múltipla: ranking da mais marcada para a menos marcada, com o % das
+// pessoas que marcaram cada opção (a soma passa de 100%, porque cada uma marca várias).
+// ---------------------------------------------------------------
+
+export function RankingSelecao({
+  config,
+  resultado,
+  anterior,
+}: {
+  config: ConfigSelecao;
+  resultado: Resultado<"selecao">;
+  anterior?: Resultado<"selecao"> | null;
+}) {
+  const maior = Math.max(1, ...resultado.contagem, ...(anterior?.contagem ?? []));
+  const ordem = config.opcoes
+    .map((_, i) => i)
+    .sort((a, b) => (resultado.contagem[b] ?? 0) - (resultado.contagem[a] ?? 0) || a - b);
+  // Até 10 linhas: com muitas opções, tudo um pouco menor para caber no telão.
+  const compacto = config.opcoes.length > 6;
+  const texto = compacto ? "text-[1.6cqw]" : "text-[2cqw]";
+  return (
+    <div
+      className={`grid w-full grid-cols-[auto_minmax(0,30%)_1fr_auto] items-center gap-x-[1.6cqw] ${compacto ? "gap-y-[1.1cqh]" : "gap-y-[2cqh]"}`}
+    >
+      {ordem.map((i, pos) => {
+        const n = resultado.contagem[i] ?? 0;
+        const antes = anterior?.contagem[i];
+        return (
+          <div key={i} className="contents">
+            <span className={`${texto} tabular-nums text-slate-400`}>{pos + 1}º</span>
+            <span className={`truncate ${texto} leading-tight text-slate-800`}>{config.opcoes[i]}</span>
+            <BarraComparada
+              fracao={n / maior}
+              fracaoAntes={antes === undefined ? undefined : antes / maior}
+              cor={corDaOpcao(i)}
+              compacto={compacto}
+            />
+            <span className={`min-w-[10cqw] whitespace-nowrap text-right ${texto} tabular-nums text-slate-900`}>
               {percentual(n, resultado.total)}%
               <span className="ml-[0.6cqw] text-[1.3cqw] text-slate-500">
                 {anterior ? `(antes ${percentual(antes ?? 0, anterior.total)}%)` : `(${n})`}

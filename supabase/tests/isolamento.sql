@@ -186,6 +186,14 @@ begin
   exception when check_violation then
     null;
   end;
+  begin
+    insert into public.atividades (evento_id, bloco_id, ordem, tipo, enunciado, config)
+    values ('00000000-0000-4000-c000-00000000000a', '00000000-0000-4000-9000-0000000000a1', 9, 'selecao', 'Máximo demais',
+            '{"opcoes": ["A", "B", "C"], "min_escolhas": 2, "max_escolhas": 4}');
+    raise exception 'FALHOU: aceitou seleção múltipla com máximo maior que o número de opções';
+  exception when check_violation then
+    null;
+  end;
 
   -- Resposta para atividade que não está aberta é recusada.
   begin

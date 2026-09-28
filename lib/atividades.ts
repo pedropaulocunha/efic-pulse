@@ -3,13 +3,14 @@
 // (config_atividade_valida e normalizar_resposta, migração 0014).
 
 // Mesmas listas dos CHECK atividades_tipo_check e atividades_estado_check.
-export type TipoAtividade = "multipla" | "escala" | "nuvem" | "ordenar" | "numero" | "aberta";
+export type TipoAtividade = "multipla" | "selecao" | "escala" | "nuvem" | "ordenar" | "numero" | "aberta";
 export type EstadoAtividade = "fechada" | "aberta" | "encerrada";
 
-export const TIPOS: TipoAtividade[] = ["multipla", "escala", "nuvem", "ordenar", "numero", "aberta"];
+export const TIPOS: TipoAtividade[] = ["multipla", "selecao", "escala", "nuvem", "ordenar", "numero", "aberta"];
 
 export const rotuloTipo: Record<TipoAtividade, string> = {
   multipla: "Múltipla escolha",
+  selecao: "Seleção múltipla",
   escala: "Escala",
   nuvem: "Nuvem de palavras",
   ordenar: "Ordenar",
@@ -18,7 +19,7 @@ export const rotuloTipo: Record<TipoAtividade, string> = {
 };
 
 // Tipos que aceitam "Nova rodada" (mesma lista de comandar_atividade, migração 0015).
-export const TIPOS_COM_RODADAS: TipoAtividade[] = ["multipla", "escala", "numero", "ordenar"];
+export const TIPOS_COM_RODADAS: TipoAtividade[] = ["multipla", "selecao", "escala", "numero", "ordenar"];
 // Tipos com referência que o instrutor revela no telão.
 export const TIPOS_COM_REFERENCIA: TipoAtividade[] = ["escala", "numero"];
 
@@ -29,6 +30,8 @@ export const rotuloEstadoAtividade: Record<EstadoAtividade, string> = {
 };
 
 export type ConfigMultipla = { opcoes: string[] };
+// Seleção múltipla: cada pessoa marca de min_escolhas a max_escolhas opções.
+export type ConfigSelecao = { opcoes: string[]; min_escolhas: number; max_escolhas: number };
 export type ConfigEscala = {
   min: number;
   max: number;
@@ -48,6 +51,7 @@ export type ConfigNumero = {
 export type ConfigAberta = { max_caracteres: number };
 export type ConfigAtividade =
   | ConfigMultipla
+  | ConfigSelecao
   | ConfigEscala
   | ConfigNuvem
   | ConfigOrdenar
@@ -55,6 +59,7 @@ export type ConfigAtividade =
   | ConfigAberta;
 
 export const LIMITE_OPCOES = { min: 2, max: 6 };
+export const LIMITE_SELECAO = { min: 3, max: 10 };
 export const LIMITE_ITENS = { min: 3, max: 6 };
 export const LIMITE_CARACTERES = { min: 20, max: 500 };
 export const LIMITE_DEGRAUS = 1000;
@@ -108,6 +113,8 @@ export type EntradaConfig = {
   casas?: string;
   max_palavras?: string;
   max_caracteres?: string;
+  min_escolhas?: string;
+  max_escolhas?: string;
 };
 
 function limparLista(lista: string[] | undefined) {
@@ -131,6 +138,21 @@ export function validarConfig(
     if (opcoes.length > LIMITE_OPCOES.max) return { erro: "São no máximo seis opções." };
     if (opcoes.some((o) => o.length > 120)) return { erro: "Cada opção pode ter até 120 caracteres." };
     return { config: { opcoes } };
+  }
+
+  if (tipo === "selecao") {
+    const opcoes = limparLista(entrada.opcoes);
+    if (opcoes.length < LIMITE_SELECAO.min) return { erro: "Informe pelo menos três opções." };
+    if (opcoes.length > LIMITE_SELECAO.max) return { erro: "São no máximo dez opções." };
+    if (opcoes.some((o) => o.length > 120)) return { erro: "Cada opção pode ter até 120 caracteres." };
+    const minimo = Number(entrada.min_escolhas);
+    const maximo = Number(entrada.max_escolhas);
+    if (!Number.isInteger(minimo) || !Number.isInteger(maximo) || minimo < 1) {
+      return { erro: "Diga quantas opções cada pessoa marca." };
+    }
+    if (maximo < minimo) return { erro: "O máximo de opções marcadas não pode ser menor que o mínimo." };
+    if (maximo > opcoes.length) return { erro: "O máximo de opções marcadas não pode passar do número de opções." };
+    return { config: { opcoes, min_escolhas: minimo, max_escolhas: maximo } };
   }
 
   if (tipo === "ordenar") {
@@ -203,6 +225,7 @@ export function validarConfig(
 // migração 0014); o celular só monta o valor.
 export type ValorResposta =
   | { opcao: number }
+  | { opcoes: number[] }
   | { numero: number }
   | { palavras: string[] }
   | { ordem: number[] }

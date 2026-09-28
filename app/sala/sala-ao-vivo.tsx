@@ -13,6 +13,7 @@ import {
   type ConfigNumero,
   type ConfigNuvem,
   type ConfigOrdenar,
+  type ConfigSelecao,
   type ValorResposta,
 } from "@/lib/atividades";
 import type { EstadoSala } from "@/utils/sala";
@@ -162,7 +163,8 @@ function Responder({
       <h1 className="text-2xl font-semibold leading-snug">{atividade.enunciado}</h1>
       {atividade.observacao && <p className="mt-2 leading-relaxed text-slate-600">{atividade.observacao}</p>}
       <div className="mt-8 flex flex-1 flex-col">
-        {atividade.tipo === "multipla" && <Multipla config={atividade.config as ConfigMultipla} {...props} />}
+{atividade.tipo === "multipla" && <Multipla config={atividade.config as ConfigMultipla} {...props} />}
+        {atividade.tipo === "selecao" && <Selecao config={atividade.config as ConfigSelecao} {...props} />}
         {atividade.tipo === "escala" && <Escala config={atividade.config as ConfigEscala} {...props} />}
         {atividade.tipo === "nuvem" && <Nuvem config={atividade.config as ConfigNuvem} {...props} />}
         {atividade.tipo === "ordenar" && <Ordenar config={atividade.config as ConfigOrdenar} {...props} />}
@@ -180,6 +182,71 @@ type PropsControle<C> = {
   erro?: string;
   aoEnviar: (valor: ValorResposta) => void;
 };
+
+// Seleção múltipla: marca de min_escolhas a max_escolhas opções. Ao chegar no máximo,
+// as outras ficam bloqueadas até desmarcar alguma.
+function Selecao({ config, anterior, enviando, erro, aoEnviar }: PropsControle<ConfigSelecao>) {
+  const [marcadas, setMarcadas] = useState<number[]>(anterior && "opcoes" in anterior ? anterior.opcoes : []);
+  const { min_escolhas: minimo, max_escolhas: maximo } = config;
+  const cheio = marcadas.length >= maximo;
+  const valida = marcadas.length >= minimo && marcadas.length <= maximo;
+
+  function tocar(i: number) {
+    setMarcadas((atual) =>
+      atual.includes(i) ? atual.filter((x) => x !== i) : atual.length >= maximo ? atual : [...atual, i],
+    );
+  }
+
+  const instrucao =
+    minimo === maximo
+      ? `Marque ${minimo} ${minimo === 1 ? "opção" : "opções"}.`
+      : `Marque de ${minimo} a ${maximo} opções.`;
+
+  return (
+    <form
+      className="flex flex-1 flex-col"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valida) aoEnviar({ opcoes: [...marcadas].sort((a, b) => a - b) });
+      }}
+    >
+      <p className="text-slate-600">
+        {instrucao} <span className="font-medium text-slate-800">{marcadas.length} marcada{marcadas.length === 1 ? "" : "s"}.</span>
+      </p>
+      <div className="mt-4 space-y-3">
+        {config.opcoes.map((opcao, i) => {
+          const marcada = marcadas.includes(i);
+          const bloqueada = !marcada && cheio;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => tocar(i)}
+              aria-pressed={marcada}
+              disabled={bloqueada}
+              className={`flex min-h-16 w-full items-center gap-4 rounded-xl border-2 px-5 py-4 text-left text-lg font-medium transition ${
+                marcada
+                  ? "border-marca bg-marca text-white"
+                  : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 disabled:opacity-40"
+              }`}
+            >
+              <span
+                aria-hidden
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-2 text-base ${
+                  marcada ? "border-white bg-white text-marca" : "border-slate-300"
+                }`}
+              >
+                {marcada ? "✓" : ""}
+              </span>
+              {opcao}
+            </button>
+          );
+        })}
+      </div>
+      <BotaoEnviar desabilitado={!valida} enviando={enviando} erro={erro} />
+    </form>
+  );
+}
 
 function BotaoEnviar({ desabilitado, enviando, erro }: { desabilitado: boolean; enviando: boolean; erro?: string }) {
   return (

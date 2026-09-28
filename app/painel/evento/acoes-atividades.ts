@@ -70,6 +70,8 @@ export async function salvarAtividade(
     casas: campo("casas"),
     max_palavras: campo("max_palavras"),
     max_caracteres: campo("max_caracteres"),
+    min_escolhas: campo("min_escolhas"),
+    max_escolhas: campo("max_escolhas"),
   });
   if ("erro" in validacao) return { erro: validacao.erro };
   // Observação opcional: aparece no celular abaixo da pergunta. Vazia = null.

@@ -9,6 +9,7 @@ import {
   LIMITE_DEGRAUS,
   LIMITE_ITENS,
   LIMITE_OPCOES,
+  LIMITE_SELECAO,
   rotuloTipo,
   TIPOS,
   type ConfigAberta,
@@ -18,6 +19,7 @@ import {
   type ConfigNumero,
   type ConfigNuvem,
   type ConfigOrdenar,
+  type ConfigSelecao,
   type TipoAtividade,
 } from "@/lib/atividades";
 import type { Bloco } from "@/lib/blocos";
@@ -31,6 +33,7 @@ const inicial: EstadoFormularioPergunta = {};
 
 const exemplos: Record<TipoAtividade, string> = {
   multipla: "Ex.: Qual a principal causa de atraso na sua agência?",
+  selecao: "Ex.: Quais canais mais funcionam na cobrança da sua agência?",
   escala: "Ex.: Quanto da carteira em atraso vocês recuperam em 90 dias?",
   nuvem: "Ex.: Em uma palavra, o que trava a cobrança?",
   ordenar: "Ex.: Ordene as etapas da cobrança, da primeira à última.",
@@ -74,8 +77,14 @@ export default function FormularioPergunta({
   // Toda atividade pertence a um bloco: sem indicação, vai para o primeiro.
   const [bloco, setBloco] = useState(blocoInicial ?? blocos?.[0]?.id ?? "");
 
-  const cMultipla = atividade?.tipo === "multipla" ? (atividade.config as ConfigMultipla) : null;
+  // Múltipla escolha e seleção múltipla usam a mesma lista de opções.
+  const cMultipla =
+    atividade?.tipo === "multipla" || atividade?.tipo === "selecao" ? (atividade.config as ConfigMultipla) : null;
   const [opcoes, setOpcoes] = useState<string[]>(cMultipla?.opcoes ?? ["", "", ""]);
+  const cSelecao = atividade?.tipo === "selecao" ? (atividade.config as ConfigSelecao) : null;
+  const [minEscolhas, setMinEscolhas] = useState(String(cSelecao?.min_escolhas ?? 2));
+  const [maxEscolhas, setMaxEscolhas] = useState(String(cSelecao?.max_escolhas ?? 3));
+  const limiteOpcoes = tipo === "selecao" ? LIMITE_SELECAO : LIMITE_OPCOES;
 
   const cEscala = atividade?.tipo === "escala" ? (atividade.config as ConfigEscala) : null;
   const [min, setMin] = useState(cEscala ? texto(cEscala.min) : "0");
@@ -191,9 +200,11 @@ export default function FormularioPergunta({
         />
       </Campo>
 
-      {tipo === "multipla" && (
+      {(tipo === "multipla" || tipo === "selecao") && (
         <fieldset className="space-y-3">
-          <legend className="text-sm font-medium text-slate-700">Opções (de 2 a 6)</legend>
+          <legend className="text-sm font-medium text-slate-700">
+            Opções (de {limiteOpcoes.min} a {limiteOpcoes.max})
+          </legend>
           {opcoes.map((o, i) => (
             <div key={i} className="flex gap-2">
               <input
@@ -204,7 +215,7 @@ export default function FormularioPergunta({
                 onChange={(e) => setOpcoes((atual) => atual.map((x, j) => (j === i ? e.target.value : x)))}
                 className={`${estiloCampo} mt-0`}
               />
-              {opcoes.length > LIMITE_OPCOES.min && (
+              {opcoes.length > limiteOpcoes.min && (
                 <button
                   type="button"
                   onClick={() => setOpcoes((atual) => atual.filter((_, j) => j !== i))}
@@ -216,12 +227,48 @@ export default function FormularioPergunta({
               )}
             </div>
           ))}
-          {opcoes.length < LIMITE_OPCOES.max && (
+          {opcoes.length < limiteOpcoes.max && (
             <button type="button" onClick={() => setOpcoes((atual) => [...atual, ""])} className={estiloLink}>
               + Adicionar opção
             </button>
           )}
         </fieldset>
+      )}
+
+      {tipo === "selecao" && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Campo rotulo="Cada pessoa marca no mínimo">
+            <select
+              name="min_escolhas"
+              value={minEscolhas}
+              onChange={(e) => setMinEscolhas(e.target.value)}
+              className={estiloCampo}
+            >
+              {Array.from({ length: Math.max(opcoes.length, LIMITE_SELECAO.min) }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? "1 opção" : `${n} opções`}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          <Campo rotulo="E no máximo" dica="O telão mostra o ranking das mais marcadas.">
+            <select
+              name="max_escolhas"
+              value={maxEscolhas}
+              onChange={(e) => setMaxEscolhas(e.target.value)}
+              className={estiloCampo}
+            >
+              {Array.from({ length: Math.max(opcoes.length, LIMITE_SELECAO.min) }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? "1 opção" : `${n} opções`}
+                </option>
+              ))}
+            </select>
+          </Campo>
+          {Number(maxEscolhas) < Number(minEscolhas) && (
+            <p className="text-sm text-red-700 sm:col-span-2">O máximo não pode ser menor que o mínimo.</p>
+          )}
+        </div>
       )}
 
       {tipo === "escala" && (

@@ -18,6 +18,7 @@ import {
   type ConfigNumero,
   type ConfigNuvem,
   type ConfigOrdenar,
+  type ConfigSelecao,
   type EstadoAtividade,
 } from "@/lib/atividades";
 import type { AtividadeControle, EstadoControle } from "@/utils/controle";
@@ -34,6 +35,11 @@ function resumo(a: AtividadeControle) {
   switch (a.tipo) {
     case "multipla":
       return (a.config as ConfigMultipla).opcoes.join(" · ");
+    case "selecao": {
+      const c = a.config as ConfigSelecao;
+      const marca = c.min_escolhas === c.max_escolhas ? `${c.min_escolhas}` : `${c.min_escolhas} a ${c.max_escolhas}`;
+      return `Marcar ${marca} · ${c.opcoes.join(" · ")}`;
+    }
     case "ordenar":
       return (a.config as ConfigOrdenar).itens.join(" · ");
     case "escala": {

@@ -182,6 +182,18 @@ export async function gerarComparativo(supabase: SupabaseClient, modeloId: strin
             linhaComp(base, opcao, "% das respostas", (id) => pct(doEvento(id)), pct(rs), "0.0%");
           });
           break;
+        case "selecao": {
+          // % das pessoas que marcaram cada opção; ordem pelo total geral.
+          const pct = (lista: RespostaComparada[], i: number) =>
+            lista.length ? lista.filter((r) => (r.valor.opcoes as number[]).includes(i)).length / lista.length : null;
+          (p.config as ConfigMultipla).opcoes
+            .map((opcao, i) => ({ opcao, i, geral: pct(rs, i) ?? 0 }))
+            .sort((x, y) => y.geral - x.geral)
+            .forEach(({ opcao, i, geral }) =>
+              linhaComp(base, opcao, "% das pessoas", (id) => pct(doEvento(id), i), geral, "0.0%"),
+            );
+          break;
+        }
         case "escala":
         case "numero": {
           const c = p.config as ConfigEscala | ConfigNumero;

@@ -81,6 +81,12 @@ function valorAleatorio(atividade) {
   switch (atividade.tipo) {
     case "multipla":
       return { opcao: sortear(c.opcoes.length) };
+    case "selecao": {
+      // Entre o mínimo e o máximo de opções, sem repetir.
+      const quantas = c.min_escolhas + sortear(c.max_escolhas - c.min_escolhas + 1);
+      const todas = c.opcoes.map((_, i) => i).sort(() => Math.random() - 0.5);
+      return { opcoes: todas.slice(0, quantas) };
+    }
     case "escala": {
       const passos = Math.round((c.max - c.min) / c.passo);
       return { numero: Number((c.min + sortear(passos + 1) * c.passo).toFixed(6)) };

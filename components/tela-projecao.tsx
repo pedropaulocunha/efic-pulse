@@ -12,8 +12,9 @@ import {
   MuralAbertas,
   NuvemPalavras,
   PontosOrdenar,
+  RankingSelecao,
 } from "@/components/resultado-telao";
-import type { ConfigEscala, ConfigMultipla, ConfigNumero, ConfigOrdenar } from "@/lib/atividades";
+import type { ConfigEscala, ConfigMultipla, ConfigNumero, ConfigOrdenar, ConfigSelecao } from "@/lib/atividades";
 import type { EstadoProjecao, ResultadoAgregado } from "@/utils/projecao";
 
 export type AtividadeTelao = NonNullable<EstadoProjecao["atividade"]>;
@@ -40,6 +41,14 @@ function Resultado({ atividade }: { atividade: AtividadeTelao }) {
           config={atividade.config as ConfigMultipla}
           resultado={r}
           anterior={antes?.tipo === "multipla" ? antes : null}
+        />
+      );
+    case "selecao":
+      return (
+        <RankingSelecao
+          config={atividade.config as ConfigSelecao}
+          resultado={r}
+          anterior={antes?.tipo === "selecao" ? antes : null}
         />
       );
     case "ordenar":

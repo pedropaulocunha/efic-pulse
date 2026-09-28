@@ -20,6 +20,8 @@ type Numerico = {
 
 export type ResultadoAgregado =
   | { tipo: "multipla"; total: number; rodada: number; contagem: number[] }
+  // Seleção múltipla: pessoas que marcaram cada opção; total = pessoas que responderam.
+  | { tipo: "selecao"; total: number; rodada: number; contagem: number[] }
   | ({ tipo: "escala" } & Numerico)
   | ({ tipo: "numero" } & Numerico)
   | { tipo: "ordenar"; total: number; rodada: number; pontos: number[] }
