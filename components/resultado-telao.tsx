@@ -32,6 +32,65 @@ import type { ResultadoAgregado, ResultadoTemas } from "@/utils/projecao";
 
 type Resultado<T extends ResultadoAgregado["tipo"]> = Extract<ResultadoAgregado, { tipo: T }>;
 
+// ---------------------------------------------------------------
+// Encaixar: o gráfico sempre cabe no espaço entre a pergunta e o rodapé.
+// Mede a altura natural do conteúdo; se passar do espaço, reduz tudo por igual
+// (letras e barras, com transform: scale) até caber. Se couber, fica no tamanho
+// normal, centralizado na vertical. Mexe só no estilo (sem estado) e refaz a
+// conta a cada desenho e a cada mudança de tamanho da tela.
+// ---------------------------------------------------------------
+
+export function Encaixar({ children }: { children: React.ReactNode }) {
+  const caixa = useRef<HTMLDivElement>(null);
+  const conteudo = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const c = caixa.current;
+    const d = conteudo.current;
+    if (!c || !d) return;
+    const ajustar = () => {
+      // Com escala s, o conteúdo fica com largura 100%/s (para ocupar a largura toda
+      // depois de reduzido), o que muda as quebras de linha. Quanto maior s, mais alto
+      // fica: por isso uma busca (metade a metade) pela maior escala que cabe.
+      const cabe = (s: number) => {
+        d.style.width = `${100 / s}%`;
+        return d.offsetHeight * s <= c.clientHeight + 0.5;
+      };
+      let escala = 1;
+      if (!cabe(1)) {
+        let menor = 0.4;
+        let maior = 1;
+        for (let vez = 0; vez < 10; vez++) {
+          const meio = (menor + maior) / 2;
+          if (cabe(meio)) menor = meio;
+          else maior = meio;
+        }
+        escala = menor;
+      }
+      d.style.width = `${100 / escala}%`;
+      d.style.transform = `scale(${escala})`;
+      d.style.top = `${Math.max(0, (c.clientHeight - d.offsetHeight * escala) / 2)}px`;
+    };
+    ajustar();
+    // Tamanho da caixa e da janela (ex.: F11 no projetor): refaz a conta.
+    const observador = new ResizeObserver(ajustar);
+    observador.observe(c);
+    window.addEventListener("resize", ajustar);
+    return () => {
+      observador.disconnect();
+      window.removeEventListener("resize", ajustar);
+    };
+  });
+
+  return (
+    <div ref={caixa} className="relative min-h-0 w-full flex-1">
+      <div ref={conteudo} className="absolute left-0 top-0 origin-top-left">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 const corDaOpcao = (i: number) => CORES_OPCOES[i % CORES_OPCOES.length];
 
 function percentual(n: number, total: number) {
@@ -481,9 +540,14 @@ export function NuvemPalavras({ resultado }: { resultado: Resultado<"nuvem"> }) 
       }
     };
     ajustar();
+    // Tamanho da caixa e da janela (ex.: F11 no projetor): refaz a conta.
     const observador = new ResizeObserver(ajustar);
     observador.observe(c);
-    return () => observador.disconnect();
+    window.addEventListener("resize", ajustar);
+    return () => {
+      observador.disconnect();
+      window.removeEventListener("resize", ajustar);
+    };
   }, [assinatura]);
 
   if (palavras.length === 0) return null;

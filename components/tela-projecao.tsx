@@ -7,6 +7,7 @@
 import { Marca } from "@/components/marca";
 import {
   BarrasMultipla,
+  Encaixar,
   HistogramaNumerico,
   LegendaRodadas,
   MuralAbertas,
@@ -109,22 +110,24 @@ export function TelaProjecao({
             </h1>
             <div className="mt-[2cqh] h-[2px] w-full bg-slate-300" />
 
-            {/* my-auto centraliza quando cabe e nunca sobe por cima da pergunta quando não cabe. */}
+            {/* O resultado nunca passa do rodapé: a nuvem se ajusta sozinha (letras menores);
+                os outros gráficos passam pelo Encaixar, que reduz tudo por igual se precisar. */}
             <div className="mt-[4cqh] flex min-h-0 flex-1 flex-col">
               {atividade.resultado ? (
-                // A nuvem ocupa todo o espaço livre (e se ajusta a ele); os outros gráficos centralizam.
-                <div
-                  className={
-                    atividade.resultado.tipo === "nuvem" && !atividade.temas ? "flex min-h-0 w-full flex-1 flex-col" : "my-auto w-full"
-                  }
-                >
-                  {atividade.resultadoRodada1 && (
-                    <p className="mb-[3cqh]">
-                      <LegendaRodadas rodada={atividade.rodada} />
-                    </p>
-                  )}
-                  <Resultado atividade={atividade} />
-                </div>
+                atividade.resultado.tipo === "nuvem" && !atividade.temas ? (
+                  <div className="flex min-h-0 w-full flex-1 flex-col">
+                    <Resultado atividade={atividade} />
+                  </div>
+                ) : (
+                  <Encaixar>
+                    {atividade.resultadoRodada1 && (
+                      <p className="mb-[3cqh]">
+                        <LegendaRodadas rodada={atividade.rodada} />
+                      </p>
+                    )}
+                    <Resultado atividade={atividade} />
+                  </Encaixar>
+                )
               ) : (
                 <p className="my-auto w-full text-center text-[2.4cqw] text-slate-500">
                   {mensagemSemResultado ??
