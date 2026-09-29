@@ -6,10 +6,13 @@ import "server-only";
 //
 // Para a IA não pular palavras, ela classifica PALAVRA POR PALAVRA (cada chave com o
 // número do tema). As que ela esquecer voltam numa segunda chamada, só com elas.
+// Se "Outros" ficar grande (mais de 15% das citações), uma chamada extra procura
+// até 2 temas novos só entre as palavras de Outros.
 
-const MODELO_PADRAO = "gpt-4o-mini";
+const MODELO_PADRAO = "gpt-4o"; // comparado com o gpt-4o-mini em 28/09/2026 (docs/ia-temas-nuvem.md): agrupa melhor; ~US$ 0,01 por resumo
 const TEMPO_MAXIMO_MS = 45_000;
 const MAX_TEMAS = 8;
+const LIMITE_OUTROS = 0.15; // fração das citações em Outros que dispara a busca de temas novos
 
 export function iaConfigurada() {
   return Boolean(process.env.OPENAI_API_KEY);
@@ -28,6 +31,9 @@ const REGRAS = [
   "- Separe ideias diferentes. Em sentimentos, por exemplo: vergonha/constrangimento, raiva/irritação,",
   "  ansiedade/medo/insegurança, indiferença/desinteresse, sentimentos positivos. Nunca um tema genérico como",
   '  "Sentimentos negativos" que junte emoções diferentes.',
+  "- Separe circunstância de atitude: o que a pessoa NÃO CONSEGUE fazer (falta de dinheiro, desemprego, doença,",
+  "  crise) é diferente do que ela NÃO QUER fazer (falta de caráter, desinteresse, prioriza outras dívidas,",
+  '  desiste, "pode mandar pro Serasa"). Em cobrança essa diferença é central.',
   "- O título NUNCA repete ou reformula a própria pergunta; ele diz o que as respostas têm em comum.",
   '- Título curto (até 40 caracteres), em português, só com a primeira letra maiúscula (ex.: "Vergonha e constrangimento"),',
   "  sem emojis e sem aspas.",
@@ -200,6 +206,71 @@ export async function sugerirTemas(
       registrar((segunda.dados as { classificacao?: { chave?: string; tema?: number }[] }).classificacao);
     }
     // Se a segunda falhar, o que faltou fica em Outros: o resumo continua valendo.
+  }
+
+  // 3ª chamada, só se Outros ficou grande: temas novos entre as palavras de Outros.
+  const citacoes = palavras.reduce((soma, p) => soma + p.n, 0);
+  const emOutros = palavras.filter((p) => (temaDa.get(p.chave) ?? 0) === 0);
+  const citacoesOutros = emOutros.reduce((soma, p) => soma + p.n, 0);
+  if (emOutros.length >= 3 && citacoesOutros > citacoes * LIMITE_OUTROS && titulos.size < MAX_TEMAS) {
+    const proximo = Math.max(...titulos.keys()) + 1;
+    const extra = await chamarOpenAI(
+      modelo,
+      REGRAS +
+        "\n\nEstas respostas ficaram fora dos temas já definidos (lista abaixo). Procure de 1 a 2 temas NOVOS entre elas, " +
+        `numerados a partir de ${proximo}, só para grupos de pelo menos 3 respostas com a mesma ideia e diferentes dos ` +
+        "temas já existentes. Classifique cada resposta num tema novo ou em 0 (Outros). Se nada formar grupo, devolva " +
+        "a lista de temas vazia e tudo em 0.",
+      {
+        pergunta,
+        temas_existentes: [...titulos.values()],
+        respostas: emOutros.map((p) => ({ chave: p.chave, resposta: p.palavra, vezes: p.n })),
+      },
+      {
+        type: "object",
+        additionalProperties: false,
+        required: ["temas", "classificacao"],
+        properties: {
+          temas: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["numero", "titulo"],
+              properties: { numero: { type: "integer" }, titulo: { type: "string" } },
+            },
+          },
+          classificacao: SCHEMA_CLASSIFICACAO,
+        },
+      },
+    );
+    chamadas++;
+    if (!("erro" in extra)) {
+      uso.entrada += extra.uso.entrada;
+      uso.saida += extra.uso.saida;
+      const dados = extra.dados as {
+        temas?: { numero?: number; titulo?: string }[];
+        classificacao?: { chave?: string; tema?: number }[];
+      };
+      const novos = new Set<number>();
+      for (const t of dados.temas ?? []) {
+        const titulo = primeiraMaiuscula(String(t.titulo ?? ""));
+        if (
+          typeof t.numero === "number" && t.numero >= proximo && !titulos.has(t.numero) &&
+          titulo && titulo.toLowerCase() !== "outros" && titulos.size < MAX_TEMAS
+        ) {
+          titulos.set(t.numero, titulo);
+          novos.add(t.numero);
+        }
+      }
+      // Só as palavras de Outros mudam, e só para um tema novo desta chamada.
+      for (const c of dados.classificacao ?? []) {
+        const chave = String(c.chave ?? "");
+        if ((temaDa.get(chave) ?? 0) === 0 && existentes.has(chave) && typeof c.tema === "number" && novos.has(c.tema)) {
+          temaDa.set(chave, c.tema);
+        }
+      }
+    }
   }
 
   const temas: TemaSugerido[] = [...titulos]

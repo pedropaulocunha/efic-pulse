@@ -43,3 +43,10 @@ Regras gerais da IA no Pulse:
 - [ ] Renomear tema e mover palavra funcionam, e os números mudam.
 - [ ] "Mostrar temas no telão" troca a nuvem pelos temas; "Voltar para a nuvem" desfaz.
 - [ ] Sem a chave configurada, o controle explica o que falta e nada quebra.
+
+## Comparação de modelos (28/09/2026, nuvens reais da turma Cacoal T1)
+
+- `gpt-4o-mini`: encaixa todas as palavras, mas erra o encaixe (ex.: "mau caráter" e "pagou o agiota" em "Dificuldades financeiras"). ~US$ 0,001 por resumo.
+- `gpt-4o`: temas mais precisos (vergonha, ansiedade e raiva separadas; "não consegue pagar" × "não quer pagar"). ~US$ 0,01 a 0,02 por resumo. **Padrão do Pulse.**
+- Ajustes que entraram: classificação palavra por palavra; segunda chamada para palavras puladas; chamada extra quando Outros passa de 15% das citações (até 2 temas novos, no máximo 8 temas); regra "circunstância × atitude".
+- O modelo pode ser trocado pela variável `OPENAI_MODEL`, sem mudar código.
