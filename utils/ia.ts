@@ -10,7 +10,7 @@ import "server-only";
 // até 2 temas novos só entre as palavras de Outros.
 
 const MODELO_PADRAO = "gpt-4o"; // comparado com o gpt-4o-mini em 28/09/2026 (docs/ia-temas-nuvem.md): agrupa melhor; ~US$ 0,01 por resumo
-const TEMPO_MAXIMO_MS = 45_000;
+const TEMPO_MAXIMO_MS = 60_000; // modelos de raciocínio demoram mais
 const MAX_TEMAS = 8;
 const LIMITE_OUTROS = 0.15; // fração das citações em Outros que dispara a busca de temas novos
 
@@ -56,14 +56,13 @@ async function chamarOpenAI(
   const chave = process.env.OPENAI_API_KEY;
   if (!chave) return { erro: "A IA não está configurada (falta a chave OPENAI_API_KEY na Vercel)." };
 
-  let resposta: Response;
-  try {
-    resposta = await fetch("https://api.openai.com/v1/chat/completions", {
+  const enviar = (comTemperatura: boolean) =>
+    fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${chave}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: modelo,
-        temperature: 0.2,
+        ...(comTemperatura ? { temperature: 0.2 } : {}),
         messages: [
           { role: "system", content: sistema },
           { role: "user", content: JSON.stringify(usuario) },
@@ -74,6 +73,19 @@ async function chamarOpenAI(
       signal: AbortSignal.timeout(TEMPO_MAXIMO_MS),
       cache: "no-store",
     });
+
+  let resposta: Response;
+  let erroTexto = "";
+  try {
+    resposta = await enviar(true);
+    // Modelos de "raciocínio" recusam a temperatura: tenta de novo sem ela.
+    if (resposta.status === 400) {
+      erroTexto = await resposta.text();
+      if (erroTexto.includes("temperature")) {
+        resposta = await enviar(false);
+        erroTexto = "";
+      }
+    }
   } catch (e) {
     console.error("OpenAI (rede):", e);
     return { erro: "A IA não respondeu a tempo. Tente de novo em instantes." };
@@ -81,7 +93,7 @@ async function chamarOpenAI(
 
   if (!resposta.ok) {
     // Nunca registra a chave; só o código e o começo da mensagem de erro.
-    console.error("OpenAI:", resposta.status, (await resposta.text()).slice(0, 300));
+    console.error("OpenAI:", resposta.status, (erroTexto || (await resposta.text())).slice(0, 300));
     if (resposta.status === 401) return { erro: "A chave da OpenAI foi recusada. Confira OPENAI_API_KEY na Vercel." };
     if (resposta.status === 404) return { erro: `O modelo "${modelo}" não está disponível nesta conta da OpenAI.` };
     if (resposta.status === 429) return { erro: "Limite de uso da OpenAI atingido. Tente de novo em instantes ou confira o saldo da conta." };

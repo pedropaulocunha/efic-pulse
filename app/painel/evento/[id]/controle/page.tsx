@@ -6,6 +6,9 @@ import { estadoControle, type EstadoControle } from "@/utils/controle";
 import { criarClienteServidor } from "@/utils/supabase/server";
 import Controle from "./controle";
 
+// Tempo máximo das ações desta página: "Resumir com IA" pode fazer até 3 chamadas à OpenAI.
+export const maxDuration = 180;
+
 export default async function PaginaControle({ params }: PageProps<"/painel/evento/[id]/controle">) {
   const { id } = await params;
   if (!uuidValido(id)) notFound();
