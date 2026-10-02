@@ -13,6 +13,7 @@ type Pergunta = {
   tipo: TipoAtividade;
   enunciado: string;
   observacao: string | null;
+  tempo_resposta_seg: number | null;
   config: ConfigAtividade;
   modelos: { titulo: string } | null;
 };
@@ -31,7 +32,7 @@ export default async function EditarPerguntaModelo({
   const [pergunta, uso] = await Promise.all([
     supabase
       .from("modelo_perguntas")
-      .select("tipo, enunciado, observacao, config, modelos(titulo)")
+      .select("tipo, enunciado, observacao, tempo_resposta_seg, config, modelos(titulo)")
       .eq("id", perguntaId)
       .eq("modelo_id", id)
       .maybeSingle<Pergunta>(),

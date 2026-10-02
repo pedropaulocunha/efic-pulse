@@ -104,11 +104,21 @@ export async function salvarPerguntaModelo(
   if ("erro" in validacao) return { erro: validacao.erro };
   // Observação opcional: aparece no celular abaixo da pergunta. Vazia = null.
   const observacao = textoLimpo(formData.get("observacao"), 500) || null;
+  // Timer opcional (0032): minutos + segundos, de 10 s a 30 min. Vazio = sem timer.
+  const tempoMinBruto = campo("tempo_min").trim();
+  const tempoSegBruto = campo("tempo_seg").trim();
+  let tempoResposta: number | null = null;
+  if (tempoMinBruto || tempoSegBruto) {
+    tempoResposta = Number(tempoMinBruto || 0) * 60 + Number(tempoSegBruto || 0);
+    if (!Number.isInteger(tempoResposta) || tempoResposta < 10 || tempoResposta > 1800) {
+      return { erro: "O tempo para responder vai de 10 segundos a 30 minutos (ou deixe em branco)." };
+    }
+  }
 
   if (perguntaId) {
     const r = await supabase
       .from("modelo_perguntas")
-      .update({ tipo, enunciado, observacao, config: validacao.config })
+      .update({ tipo, enunciado, observacao, tempo_resposta_seg: tempoResposta, config: validacao.config })
       .eq("id", perguntaId)
       .eq("modelo_id", modeloId)
       .select("id");
@@ -132,6 +142,7 @@ export async function salvarPerguntaModelo(
       tipo,
       enunciado,
       observacao,
+      tempo_resposta_seg: tempoResposta,
       config: validacao.config,
     });
     if (criada.error) return { erro: "Não foi possível criar a pergunta. Só o admin mexe na biblioteca." };

@@ -77,6 +77,16 @@ export async function salvarAtividade(
   if ("erro" in validacao) return { erro: validacao.erro };
   // Observação opcional: aparece no celular abaixo da pergunta. Vazia = null.
   const observacao = textoLimpo(formData.get("observacao"), 500) || null;
+  // Timer opcional (0032): minutos + segundos, de 10 s a 30 min. Vazio = sem timer.
+  const tempoMinBruto = campo("tempo_min").trim();
+  const tempoSegBruto = campo("tempo_seg").trim();
+  let tempoResposta: number | null = null;
+  if (tempoMinBruto || tempoSegBruto) {
+    tempoResposta = Number(tempoMinBruto || 0) * 60 + Number(tempoSegBruto || 0);
+    if (!Number.isInteger(tempoResposta) || tempoResposta < 10 || tempoResposta > 1800) {
+      return { erro: "O tempo para responder vai de 10 segundos a 30 minutos (ou deixe em branco)." };
+    }
+  }
 
   // Toda atividade pertence a um bloco (0024). O banco confere que é do mesmo evento.
   const blocoId = campo("bloco");
@@ -100,7 +110,7 @@ export async function salvarAtividade(
 
     const alterada = await supabase
       .from("atividades")
-      .update({ tipo, enunciado, observacao, config: validacao.config, ...(ordem ? { bloco_id: blocoId, ordem } : {}) })
+      .update({ tipo, enunciado, observacao, tempo_resposta_seg: tempoResposta, config: validacao.config, ...(ordem ? { bloco_id: blocoId, ordem } : {}) })
       .eq("id", atividadeId)
       .eq("estado", "fechada")
       .select("id");
@@ -117,6 +127,7 @@ export async function salvarAtividade(
       tipo,
       enunciado,
       observacao,
+      tempo_resposta_seg: tempoResposta,
       config: validacao.config,
     });
     if (criada.error) return { erro: "Não foi possível criar a atividade. Tente de novo." };
@@ -290,7 +301,8 @@ export type Comando =
   | "mostrar_resultado"
   | "esconder_resultado"
   | "revelar_referencia"
-  | "esconder_referencia";
+  | "esconder_referencia"
+  | "mais_tempo";
 
 const COMANDOS: Comando[] = [
   "abrir",
@@ -300,6 +312,7 @@ const COMANDOS: Comando[] = [
   "esconder_resultado",
   "revelar_referencia",
   "esconder_referencia",
+  "mais_tempo",
 ];
 
 export async function comandarAtividade(

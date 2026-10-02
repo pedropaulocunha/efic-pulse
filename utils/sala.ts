@@ -16,6 +16,7 @@ export type EstadoSala = {
     tipo: TipoAtividade;
     enunciado: string;
     observacao?: string | null; // explicação opcional, abaixo da pergunta
+    restante_ms?: number | null; // timer: quanto falta, pelo relógio do banco
     config: ConfigAtividade;
     estado: Exclude<EstadoAtividade, "fechada">;
     rodada: number;

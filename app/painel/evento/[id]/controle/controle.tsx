@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { COR_FIM_TEMPO, formatarContagem, useContagem } from "@/components/contagem";
 import { Marca } from "@/components/marca";
 import { TelaProjecao } from "@/components/tela-projecao";
 import { useEstadoAoVivo } from "@/components/use-estado-ao-vivo";
@@ -186,6 +187,20 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
                   </span>
                 </p>
 
+                {selecionada.estado === "aberta" && selecionada.restante_ms !== null ? (
+                  <TimerControle
+                    restanteMs={selecionada.restante_ms}
+                    ocupado={ocupado}
+                    aoMaisTempo={() => comandar("mais_tempo")}
+                  />
+                ) : (
+                  selecionada.tempo_resposta_seg && (
+                    <p className="mt-2 text-sm text-slate-500">
+                      Tempo para responder: {formatarContagem(selecionada.tempo_resposta_seg)} (começa ao abrir)
+                    </p>
+                  )
+                )}
+
                 <BotoesComando
                   atividade={selecionada}
                   noTelao={evento.atividadeAtualId === selecionada.id}
@@ -332,4 +347,38 @@ function legendaPrevia(a: AtividadeControle, atividadeAtualId: string | null) {
   if (!noTelao) return "Esta atividade não está no telão.";
   if (a.resultado_visivel) return "No telão agora, igual a esta prévia.";
   return "No telão agora só a pergunta; o resultado aparece quando você tocar em Mostrar resultado.";
+}
+
+// Timer da pergunta aberta, com +30 s. Só avisa: zerar não encerra a votação.
+function TimerControle({
+  restanteMs,
+  ocupado,
+  aoMaisTempo,
+}: {
+  restanteMs: number;
+  ocupado: boolean;
+  aoMaisTempo: () => void;
+}) {
+  const segundos = useContagem(restanteMs);
+  if (segundos === null) return null;
+  const acabando = segundos <= 10;
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-3">
+      <span
+        className="text-3xl font-semibold tabular-nums"
+        style={{ color: acabando ? COR_FIM_TEMPO : "#0f4c64" }}
+      >
+        {segundos > 0 ? formatarContagem(segundos) : "Tempo esgotado"}
+      </span>
+      <button
+        type="button"
+        disabled={ocupado}
+        onClick={aoMaisTempo}
+        className="h-11 rounded-lg border-2 border-slate-300 bg-white px-4 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-40"
+      >
+        +30 s
+      </button>
+      {segundos === 0 && <span className="text-sm text-slate-500">A votação continua aberta até você encerrar.</span>}
+    </div>
+  );
 }

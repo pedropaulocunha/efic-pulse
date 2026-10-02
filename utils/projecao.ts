@@ -50,6 +50,8 @@ export type EstadoProjecao = {
     config: ConfigAtividade; // a referência só vem depois de revelada
     estado: EstadoAtividade;
     rodada: number;
+    // Timer: quanto falta (ms) enquanto a votação está aberta; null = sem timer.
+    restanteMs?: number | null;
     resultado: ResultadoAgregado | null; // só quando o instrutor mostra
     // A partir da rodada 2: o resultado da rodada 1, para comparar.
     resultadoRodada1: ResultadoAgregado | null;
@@ -82,7 +84,7 @@ export async function estadoProjecao(token: string): Promise<EstadoProjecao | nu
 
   const atividade = await db
     .from("atividades")
-    .select("id, tipo, enunciado, config, estado, resultado_visivel, referencia_revelada, rodada_atual")
+    .select("id, tipo, enunciado, config, estado, resultado_visivel, referencia_revelada, rodada_atual, timer_fim")
     .eq("id", e.atividade_atual_id)
     .single();
   if (atividade.error) throw atividade.error;
@@ -138,6 +140,7 @@ export async function estadoProjecao(token: string): Promise<EstadoProjecao | nu
       config,
       estado: a.estado,
       rodada: a.rodada_atual,
+      restanteMs: a.estado === "aberta" && a.timer_fim ? Date.parse(a.timer_fim) - Date.now() : null,
       resultado,
       resultadoRodada1,
       temas,

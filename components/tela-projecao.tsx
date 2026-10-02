@@ -4,6 +4,7 @@
 // As medidas são proporcionais à CAIXA onde ele está (unidades cqw/cqh), e não à
 // tela: por isso o mesmo desenho cabe inteiro no projetor e na caixinha.
 
+import { ContagemTelao } from "@/components/contagem";
 import { Marca } from "@/components/marca";
 import {
   BarrasMultipla,
@@ -98,14 +99,21 @@ export function TelaProjecao({
   // Texto no lugar do resultado (padrão: "Responda pelo celular." / "Votação encerrada.").
   mensagemSemResultado?: string;
 }) {
+  const comTimer = atividade?.estado === "aberta" && typeof atividade.restanteMs === "number";
   return (
     <div className="relative h-full w-full overflow-hidden bg-white text-slate-900 [container-type:size]">
+      {comTimer && <ContagemTelao restanteMs={atividade.restanteMs} />}
       <div className="flex h-full w-full flex-col px-[5cqw] py-[5cqh]">
         {atividade ? (
           <div className="flex min-h-0 flex-1 flex-col pb-[10cqh]">
             {/* Pergunta na serifa da logo, em petróleo escuro, com linha embaixo: separa
                 a pergunta das respostas. Tamanho pelo menor entre largura e altura. */}
-            <h1 className="font-marca-serif text-[min(3cqw,5.2cqh)] font-semibold leading-tight text-[#0f4c64]">
+            {/* Com timer, a pergunta deixa espaço à direita para ele. */}
+            <h1
+              className={`font-marca-serif text-[min(3cqw,5.2cqh)] font-semibold leading-tight text-[#0f4c64] ${
+                comTimer ? "pr-[16cqw]" : ""
+              }`}
+            >
               {atividade.enunciado}
             </h1>
             <div className="mt-[2cqh] h-[2px] w-full bg-slate-300" />
@@ -166,7 +174,7 @@ export function TelaProjecao({
       </div>
 
       {semConexao && (
-        <p className="absolute right-[4cqw] top-[3cqh] text-[1.2cqw] text-amber-700">Reconectando…</p>
+        <p className="absolute right-[4cqw] top-[1cqh] text-[1.2cqw] text-amber-700">Reconectando…</p>
       )}
     </div>
   );

@@ -29,6 +29,9 @@ export type AtividadeControle = {
   resultado_visivel: boolean;
   referencia_revelada: boolean;
   rodada_atual: number;
+  tempo_resposta_seg: number | null;
+  timer_fim: string | null;
+  restante_ms: number | null; // timer: quanto falta, calculado no servidor
   respostas: number; // da rodada atual
 };
 
@@ -167,6 +170,7 @@ async function previaDa(
     config,
     estado: atividade.estado,
     rodada: atividade.rodada_atual,
+    restanteMs: atividade.restante_ms,
     resultado,
     resultadoRodada1,
   };
@@ -185,7 +189,7 @@ export async function estadoControle(
       .maybeSingle(),
     supabase
       .from("atividades")
-      .select("id, ordem, bloco_id, tipo, enunciado, observacao, config, estado, resultado_visivel, referencia_revelada, rodada_atual")
+      .select("id, ordem, bloco_id, tipo, enunciado, observacao, config, estado, resultado_visivel, referencia_revelada, rodada_atual, tempo_resposta_seg, timer_fim")
       .eq("evento_id", eventoId),
     supabase.from("blocos").select("id, ordem, titulo").eq("evento_id", eventoId),
     supabase.from("inscricoes").select("id", { count: "exact", head: true }).eq("evento_id", eventoId),
@@ -207,7 +211,11 @@ export async function estadoControle(
       return (r.data as ResultadoAgregado) ?? null;
     }),
   );
-  const lista: AtividadeControle[] = naOrdem.map((a, i) => ({ ...a, respostas: resultados[i]?.total ?? 0 }));
+  const lista: AtividadeControle[] = naOrdem.map((a, i) => ({
+    ...a,
+    respostas: resultados[i]?.total ?? 0,
+    restante_ms: a.estado === "aberta" && a.timer_fim ? Date.parse(a.timer_fim) - Date.now() : null,
+  }));
 
   // Sem seleção: a primeira da lista (na ordem dos blocos).
   const indice = selecionadaId ? lista.findIndex((a) => a.id === selecionadaId) : lista.length > 0 ? 0 : -1;

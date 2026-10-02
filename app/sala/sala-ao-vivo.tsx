@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { COR_FIM_TEMPO, formatarContagem, useContagem } from "@/components/contagem";
 import { useEstadoAoVivo } from "@/components/use-estado-ao-vivo";
 import {
   formatarNumero,
@@ -160,10 +161,11 @@ function Responder({
           Rodada {atividade.rodada}: responda de novo
         </p>
       )}
+      <TempoNoCelular restanteMs={atividade.restante_ms} />
       <h1 className="text-2xl font-semibold leading-snug">{atividade.enunciado}</h1>
       {atividade.observacao && <p className="mt-2 leading-relaxed text-slate-600">{atividade.observacao}</p>}
       <div className="mt-8 flex flex-1 flex-col">
-{atividade.tipo === "multipla" && <Multipla config={atividade.config as ConfigMultipla} {...props} />}
+        {atividade.tipo === "multipla" && <Multipla config={atividade.config as ConfigMultipla} {...props} />}
         {atividade.tipo === "selecao" && <Selecao config={atividade.config as ConfigSelecao} {...props} />}
         {atividade.tipo === "escala" && <Escala config={atividade.config as ConfigEscala} {...props} />}
         {atividade.tipo === "nuvem" && <Nuvem config={atividade.config as ConfigNuvem} {...props} />}
@@ -245,6 +247,22 @@ function Selecao({ config, anterior, enviando, erro, aoEnviar }: PropsControle<C
       </div>
       <BotaoEnviar desabilitado={!valida} enviando={enviando} erro={erro} />
     </form>
+  );
+}
+
+// Timer da pergunta no celular. Só avisa: depois de zerar, ainda dá para responder
+// até o instrutor encerrar.
+function TempoNoCelular({ restanteMs }: { restanteMs: number | null | undefined }) {
+  const segundos = useContagem(restanteMs);
+  if (segundos === null) return null;
+  const acabando = segundos <= 10;
+  return (
+    <p
+      className="mb-3 self-start rounded-full border-2 px-3 py-1 text-sm font-semibold tabular-nums"
+      style={{ borderColor: acabando ? COR_FIM_TEMPO : "#cbd5e1", color: acabando ? COR_FIM_TEMPO : "#0f4c64" }}
+    >
+      {segundos > 0 ? `⏱ ${formatarContagem(segundos)} para responder` : "Tempo esgotado"}
+    </p>
   );
 }
 
