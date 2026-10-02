@@ -230,3 +230,16 @@ export type ValorResposta =
   | { palavras: string[] }
   | { ordem: number[] }
   | { texto: string };
+
+// Timer da pergunta (0032): minutos + segundos do formulário, de 10 s a 30 min.
+// Os dois vazios = sem timer (null).
+export function lerTempoResposta(minutos: string, segundos: string): { tempo: number | null } | { erro: string } {
+  const m = minutos.trim();
+  const sg = segundos.trim();
+  if (!m && !sg) return { tempo: null };
+  const tempo = Number(m || 0) * 60 + Number(sg || 0);
+  if (!Number.isInteger(tempo) || tempo < 10 || tempo > 1800) {
+    return { erro: "O tempo para responder vai de 10 segundos a 30 minutos (ou deixe em branco)." };
+  }
+  return { tempo };
+}

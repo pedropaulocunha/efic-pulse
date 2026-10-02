@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { TIPOS, validarConfig, type TipoAtividade } from "@/lib/atividades";
+import { lerTempoResposta, TIPOS, validarConfig, type TipoAtividade } from "@/lib/atividades";
 import { textoLimpo, uuidValido } from "@/lib/formatos";
 import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
@@ -78,15 +78,9 @@ export async function salvarAtividade(
   // Observação opcional: aparece no celular abaixo da pergunta. Vazia = null.
   const observacao = textoLimpo(formData.get("observacao"), 500) || null;
   // Timer opcional (0032): minutos + segundos, de 10 s a 30 min. Vazio = sem timer.
-  const tempoMinBruto = campo("tempo_min").trim();
-  const tempoSegBruto = campo("tempo_seg").trim();
-  let tempoResposta: number | null = null;
-  if (tempoMinBruto || tempoSegBruto) {
-    tempoResposta = Number(tempoMinBruto || 0) * 60 + Number(tempoSegBruto || 0);
-    if (!Number.isInteger(tempoResposta) || tempoResposta < 10 || tempoResposta > 1800) {
-      return { erro: "O tempo para responder vai de 10 segundos a 30 minutos (ou deixe em branco)." };
-    }
-  }
+  const leituraTempo = lerTempoResposta(campo("tempo_min"), campo("tempo_seg"));
+  if ("erro" in leituraTempo) return { erro: leituraTempo.erro };
+  const tempoResposta = leituraTempo.tempo;
 
   // Toda atividade pertence a um bloco (0024). O banco confere que é do mesmo evento.
   const blocoId = campo("bloco");
@@ -132,6 +126,45 @@ export async function salvarAtividade(
     });
     if (criada.error) return { erro: "Não foi possível criar a atividade. Tente de novo." };
   }
+
+  revalidatePath(`/painel/evento/${eventoId}`);
+  redirect(`/painel/evento/${eventoId}#atividades`);
+}
+
+// Ajustes que não mexem nas respostas: tempo para responder e observação.
+// Valem em qualquer estado (aberta, encerrada). Em pergunta da biblioteca, só o
+// tempo (a observação é do modelo; o banco também confere). O tempo novo vale a
+// partir do próximo "Abrir" ou "Nova rodada".
+export async function salvarAjustesAtividade(
+  eventoId: string,
+  atividadeId: string,
+  _anterior: EstadoFormularioAtividade,
+  formData: FormData,
+): Promise<EstadoFormularioAtividade> {
+  if (!uuidValido(eventoId) || !uuidValido(atividadeId)) return { erro: "Atividade inválida." };
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const { supabase } = sessao;
+
+  const leituraTempo = lerTempoResposta(String(formData.get("tempo_min") ?? ""), String(formData.get("tempo_seg") ?? ""));
+  if ("erro" in leituraTempo) return { erro: leituraTempo.erro };
+
+  const atual = await supabase
+    .from("atividades")
+    .select("modelo_pergunta_id")
+    .eq("id", atividadeId)
+    .eq("evento_id", eventoId)
+    .maybeSingle();
+  if (atual.error) return { erro: SEM_CONEXAO };
+  if (!atual.data) return { erro: "Atividade não encontrada." };
+
+  const mudancas: { tempo_resposta_seg: number | null; observacao?: string | null } = {
+    tempo_resposta_seg: leituraTempo.tempo,
+  };
+  if (!atual.data.modelo_pergunta_id) mudancas.observacao = textoLimpo(formData.get("observacao"), 500) || null;
+
+  const alterada = await supabase.from("atividades").update(mudancas).eq("id", atividadeId).select("id");
+  if (alterada.error || alterada.data.length === 0) return { erro: "Não foi possível salvar. Tente de novo." };
 
   revalidatePath(`/painel/evento/${eventoId}`);
   redirect(`/painel/evento/${eventoId}#atividades`);

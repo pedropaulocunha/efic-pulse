@@ -80,10 +80,6 @@ export default function FormularioPergunta({
   const [tipo, setTipo] = useState<TipoAtividade>(atividade?.tipo ?? "multipla");
   const [enunciado, setEnunciado] = useState(atividade?.enunciado ?? "");
   const [observacao, setObservacao] = useState(atividade?.observacao ?? "");
-  // Timer opcional: minutos e segundos (de 10 s a 30 min). Vazio = sem timer.
-  const tempoInicial = atividade?.tempo_resposta_seg ?? null;
-  const [tempoMin, setTempoMin] = useState(tempoInicial === null ? "" : String(Math.floor(tempoInicial / 60)));
-  const [tempoSeg, setTempoSeg] = useState(tempoInicial === null ? "" : String(tempoInicial % 60));
   // Toda atividade pertence a um bloco: sem indicação, vai para o primeiro.
   const [bloco, setBloco] = useState(blocoInicial ?? blocos?.[0]?.id ?? "");
 
@@ -210,35 +206,7 @@ export default function FormularioPergunta({
         />
       </Campo>
 
-      <fieldset>
-        <legend className="text-sm font-medium text-slate-700">Tempo para responder (opcional)</legend>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <input
-            name="tempo_min"
-            inputMode="numeric"
-            value={tempoMin}
-            onChange={(e) => setTempoMin(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
-            placeholder="0"
-            aria-label="Minutos"
-            className={`${estiloCampo} mt-0 w-20 text-center`}
-          />
-          <span className="text-slate-600">min</span>
-          <input
-            name="tempo_seg"
-            inputMode="numeric"
-            value={tempoSeg}
-            onChange={(e) => setTempoSeg(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
-            placeholder="0"
-            aria-label="Segundos"
-            className={`${estiloCampo} mt-0 w-20 text-center`}
-          />
-          <span className="text-slate-600">s</span>
-        </div>
-        <span className="mt-1 block text-sm text-slate-500">
-          De 10 segundos a 30 minutos. A contagem começa ao abrir e aparece no telão, no celular e no controle; ao
-          zerar, só avisa (a votação continua aberta até você encerrar). Deixe em branco para não ter tempo.
-        </span>
-      </fieldset>
+      <CampoTempo inicial={atividade?.tempo_resposta_seg ?? null} />
 
       {(tipo === "multipla" || tipo === "selecao") && (
         <fieldset className="space-y-3">
@@ -467,5 +435,43 @@ export default function FormularioPergunta({
         </Link>
       </div>
     </form>
+  );
+}
+
+// Timer opcional da pergunta: minutos e segundos (de 10 s a 30 min). Vazio = sem timer.
+// Usado no formulário completo e no de ajustes (pergunta já aberta ou da biblioteca).
+export function CampoTempo({ inicial }: { inicial: number | null }) {
+  const [tempoMin, setTempoMin] = useState(inicial === null ? "" : String(Math.floor(inicial / 60)));
+  const [tempoSeg, setTempoSeg] = useState(inicial === null ? "" : String(inicial % 60));
+  return (
+      <fieldset>
+        <legend className="text-sm font-medium text-slate-700">Tempo para responder (opcional)</legend>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <input
+            name="tempo_min"
+            inputMode="numeric"
+            value={tempoMin}
+            onChange={(e) => setTempoMin(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
+            placeholder="0"
+            aria-label="Minutos"
+            className={`${estiloCampo} mt-0 w-20 text-center`}
+          />
+          <span className="text-slate-600">min</span>
+          <input
+            name="tempo_seg"
+            inputMode="numeric"
+            value={tempoSeg}
+            onChange={(e) => setTempoSeg(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
+            placeholder="0"
+            aria-label="Segundos"
+            className={`${estiloCampo} mt-0 w-20 text-center`}
+          />
+          <span className="text-slate-600">s</span>
+        </div>
+        <span className="mt-1 block text-sm text-slate-500">
+          De 10 segundos a 30 minutos. A contagem começa ao abrir e aparece no telão, no celular e no controle; ao
+          zerar, só avisa (a votação continua aberta até você encerrar). Deixe em branco para não ter tempo.
+        </span>
+      </fieldset>
   );
 }

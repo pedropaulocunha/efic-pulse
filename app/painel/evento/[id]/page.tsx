@@ -301,14 +301,13 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
                                   Da biblioteca
                                 </span>
                               )}
-                              {a.estado === "fechada" && !a.modelo_pergunta_id && (
-                                <Link
-                                  href={`/painel/evento/${e.id}/atividade/${a.id}`}
-                                  className="inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-slate-600 hover:bg-slate-50"
-                                >
-                                  Editar
-                                </Link>
-                              )}
+                              {/* Fechada: edita tudo. Aberta, encerrada ou da biblioteca: só tempo e observação. */}
+                              <Link
+                                href={`/painel/evento/${e.id}/atividade/${a.id}`}
+                                className="inline-flex h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-slate-600 hover:bg-slate-50"
+                              >
+                                Editar
+                              </Link>
                               {/* As setas atravessam blocos: na ponta, a atividade passa para o bloco vizinho. */}
                               <BotoesAtividade
                                 eventoId={e.id}

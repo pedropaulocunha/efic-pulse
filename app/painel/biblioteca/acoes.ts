@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { EstadoFormularioPergunta } from "@/components/formulario-pergunta";
-import { TIPOS, validarConfig, type TipoAtividade } from "@/lib/atividades";
+import { lerTempoResposta, TIPOS, validarConfig, type TipoAtividade } from "@/lib/atividades";
 import { textoLimpo, uuidValido } from "@/lib/formatos";
 import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
@@ -105,15 +105,9 @@ export async function salvarPerguntaModelo(
   // Observação opcional: aparece no celular abaixo da pergunta. Vazia = null.
   const observacao = textoLimpo(formData.get("observacao"), 500) || null;
   // Timer opcional (0032): minutos + segundos, de 10 s a 30 min. Vazio = sem timer.
-  const tempoMinBruto = campo("tempo_min").trim();
-  const tempoSegBruto = campo("tempo_seg").trim();
-  let tempoResposta: number | null = null;
-  if (tempoMinBruto || tempoSegBruto) {
-    tempoResposta = Number(tempoMinBruto || 0) * 60 + Number(tempoSegBruto || 0);
-    if (!Number.isInteger(tempoResposta) || tempoResposta < 10 || tempoResposta > 1800) {
-      return { erro: "O tempo para responder vai de 10 segundos a 30 minutos (ou deixe em branco)." };
-    }
-  }
+  const leituraTempo = lerTempoResposta(campo("tempo_min"), campo("tempo_seg"));
+  if ("erro" in leituraTempo) return { erro: leituraTempo.erro };
+  const tempoResposta = leituraTempo.tempo;
 
   if (perguntaId) {
     const r = await supabase

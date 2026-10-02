@@ -8,6 +8,7 @@ import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
 import FormularioPergunta from "@/components/formulario-pergunta";
 import { salvarAtividade } from "../../../acoes-atividades";
+import FormularioAjustes from "./ajustes";
 
 type Atividade = {
   tipo: TipoAtividade;
@@ -54,13 +55,26 @@ export default async function EditarAtividade({
         </Link>
         <h1 className="mt-4 text-2xl font-semibold">Editar atividade</h1>
         <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
-          {a.modelo_pergunta_id ? (
-            <p className="text-slate-600">
-              Esta pergunta vem da biblioteca e é igual em todos os eventos que usam o modelo, para que as respostas
-              possam ser comparadas. Por isso não pode ser alterada aqui. Para mudar de bloco, use o campo
-              &quot;Bloco&quot; na lista de atividades.
-            </p>
-          ) : a.estado === "fechada" ? (
+          {a.modelo_pergunta_id || a.estado !== "fechada" ? (
+            <>
+              <p className="font-medium text-slate-800">{a.enunciado}</p>
+              <p className="mt-2 text-slate-600">
+                {a.modelo_pergunta_id
+                  ? "Esta pergunta vem da biblioteca e é igual em todos os eventos que usam o modelo, para que as respostas possam ser comparadas. Aqui só dá para mudar o tempo para responder."
+                  : "Esta pergunta já foi aberta: o texto, o tipo e as opções ficam travados, porque as respostas estão ligadas a eles. O tempo para responder e a observação podem mudar."}{" "}
+                Para mudar de bloco, use o campo &quot;Bloco&quot; na lista de atividades.
+              </p>
+              <div className="mt-6">
+                <FormularioAjustes
+                  eventoId={id}
+                  atividadeId={atividadeId}
+                  tempo={a.tempo_resposta_seg}
+                  observacaoInicial={a.observacao}
+                  daBiblioteca={Boolean(a.modelo_pergunta_id)}
+                />
+              </div>
+            </>
+          ) : (
             <FormularioPergunta
               acaoSalvar={salvarAtividade.bind(null, id, atividadeId)}
               voltar={`/painel/evento/${id}#atividades`}
@@ -68,11 +82,6 @@ export default async function EditarAtividade({
               blocos={blocos.data}
               blocoInicial={a.bloco_id}
             />
-          ) : (
-            <p className="text-slate-600">
-              Esta atividade já foi aberta e não pode mais ser editada, porque as respostas estão ligadas às opções.
-              Se precisar, crie outra atividade.
-            </p>
           )}
         </div>
       </main>
