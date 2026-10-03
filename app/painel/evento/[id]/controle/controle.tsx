@@ -57,7 +57,7 @@ function resumo(a: AtividadeControle) {
       return n === 1 ? "1 palavra por pessoa" : `Até ${n} palavras por pessoa`;
     }
     case "aberta":
-      return `Texto de até ${(a.config as ConfigAberta).max_caracteres} caracteres; aprove no quadro abaixo`;
+      return `Texto de até ${(a.config as ConfigAberta).max_caracteres} caracteres; entra no mural na hora, e você pode tirar no quadro abaixo`;
   }
 }
 

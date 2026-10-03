@@ -140,7 +140,7 @@ function Responder({
         <p className="text-lg text-slate-500">{atividade.enunciado}</p>
         <p className="mt-8 text-3xl font-semibold text-emerald-700">Resposta enviada.</p>
         {atividade.tipo === "aberta" && (
-          <p className="mt-3 text-slate-500">Ela aparece no telão, sem o seu nome, se o instrutor aprovar.</p>
+          <p className="mt-3 text-slate-500">Ela aparece no telão, sem o seu nome.</p>
         )}
         <button
           type="button"
@@ -509,7 +509,7 @@ function Numero({ config, anterior, enviando, erro, aoEnviar }: PropsControle<Co
   );
 }
 
-// Resposta aberta: texto livre. No telão, só se o instrutor aprovar, e sem o nome.
+// Resposta aberta: texto livre. Entra no mural do telão na hora, sem o nome; o instrutor pode tirar.
 function Aberta({ config, anterior, enviando, erro, aoEnviar }: PropsControle<ConfigAberta>) {
   const [texto, setTexto] = useState(anterior && "texto" in anterior ? anterior.texto : "");
   const limpo = texto.replace(/\s+/g, " ").trim();

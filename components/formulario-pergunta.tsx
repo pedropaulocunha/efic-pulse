@@ -411,7 +411,7 @@ export default function FormularioPergunta({
       {tipo === "aberta" && (
         <Campo
           rotulo="Tamanho máximo da resposta (caracteres)"
-          dica={`Entre ${LIMITE_CARACTERES.min} e ${LIMITE_CARACTERES.max}. As respostas só aparecem no telão depois que você aprovar no controle, sempre sem o nome de quem escreveu.`}
+          dica={`Entre ${LIMITE_CARACTERES.min} e ${LIMITE_CARACTERES.max}. As respostas entram no mural do telão na hora, sempre sem o nome de quem escreveu; você pode tirar qualquer uma pelo controle.`}
         >
           <input
             name="max_caracteres"

@@ -77,7 +77,7 @@ function resumoConfig(a: Atividade) {
       return n === 1 ? "1 palavra" : `Até ${n} palavras`;
     }
     case "aberta":
-      return `Texto de até ${(a.config as ConfigAberta).max_caracteres} caracteres, com aprovação`;
+      return `Texto de até ${(a.config as ConfigAberta).max_caracteres} caracteres, entra no mural na hora`;
   }
 }
 

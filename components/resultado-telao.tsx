@@ -640,13 +640,13 @@ export function TemasNuvem({ temas }: { temas: ResultadoTemas }) {
 }
 
 // ---------------------------------------------------------------
-// Respostas abertas: mural só com as aprovadas, sem autor
+// Respostas abertas: mural com as que estão liberadas (entram na hora; o instrutor pode tirar), sem autor
 // ---------------------------------------------------------------
 
 export function MuralAbertas({ resultado }: { resultado: Resultado<"aberta"> }) {
   const textos = resultado.aprovadas.slice(0, 12);
   if (textos.length === 0) {
-    return <p className="w-full text-center text-[2.4cqw] text-slate-400">As respostas aparecem aqui quando aprovadas.</p>;
+    return <p className="w-full text-center text-[2.4cqw] text-slate-400">As respostas aparecem aqui assim que chegarem.</p>;
   }
   // Menos cartões, letra maior.
   const tamanho = textos.length <= 3 ? "text-[2cqw]" : textos.length <= 6 ? "text-[1.7cqw]" : "text-[1.4cqw]";
