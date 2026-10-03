@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { normalizarBusca } from "@/lib/mural";
 import type { Moderacao } from "@/utils/controle";
 import { moderarResposta, ocultarPalavra } from "../../acoes-atividades";
 
@@ -9,10 +10,12 @@ import { moderarResposta, ocultarPalavra } from "../../acoes-atividades";
 export default function PainelModeracao({
   eventoId,
   moderacao,
+  filtro = null,
   aoMudar,
 }: {
   eventoId: string;
   moderacao: Moderacao;
+  filtro?: string | null; // filtro do mural (texto livre): a lista mostra só o que o telão mostra
   aoMudar: () => Promise<void>;
 }) {
   const [ocupado, iniciar] = useTransition();
@@ -82,14 +85,19 @@ export default function PainelModeracao({
   // Desde a 0033 as respostas entram no mural na hora. "Esperando" só aparece para
   // respostas antigas, de antes dessa mudança.
   const pendentes = moderacao.respostas.filter((r) => r.aprovada === null);
-  const noMural = moderacao.respostas.filter((r) => r.aprovada === true);
+  const busca = filtro ? normalizarBusca(filtro) : "";
+  const todasNoMural = moderacao.respostas.filter((r) => r.aprovada === true);
+  const noMural = busca ? todasNoMural.filter((r) => normalizarBusca(r.texto).includes(busca)) : todasNoMural;
   const fora = moderacao.respostas.filter((r) => r.aprovada === false);
   const botaoTirar =
     "h-11 shrink-0 rounded-lg border border-slate-300 px-3 text-sm text-slate-600 hover:border-red-300 hover:bg-red-50 disabled:opacity-50";
   const botaoVoltar = "h-11 shrink-0 rounded-lg px-3 text-sm font-medium text-marca hover:bg-slate-100 disabled:opacity-50";
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <h2 className="font-semibold">Respostas no mural ({noMural.length})</h2>
+      <h2 className="font-semibold">
+        Respostas no mural ({todasNoMural.length})
+        {busca && <span className="ml-2 text-sm font-normal text-slate-500">mostrando {noMural.length} com “{filtro}”</span>}
+      </h2>
       <p className="mt-1 text-sm text-slate-500">
         As respostas entram no mural do telão assim que chegam, sempre sem o nome de quem escreveu. Toque em
         “Tirar do mural” para esconder uma; ela continua fora mesmo se a pessoa editar o texto.
@@ -131,7 +139,7 @@ export default function PainelModeracao({
         <p className="mt-4 text-slate-500">Nenhuma resposta no mural ainda.</p>
       ) : (
         <ul className="mt-4 space-y-2">
-          {noMural.map((r) => (
+          {[...noMural].reverse().map((r) => (
             <li key={r.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50 p-3">
               <p className="text-slate-800">{r.texto}</p>
               <button

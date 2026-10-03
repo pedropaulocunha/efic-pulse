@@ -6,7 +6,7 @@ import { lerTempoResposta, TIPOS, validarConfig, type TipoAtividade } from "@/li
 import { textoLimpo, uuidValido } from "@/lib/formatos";
 import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
-import { sugerirTemas } from "@/utils/ia";
+import { resumirAbertas, sugerirTemas } from "@/utils/ia";
 import { avisarEvento } from "@/utils/tempo-real";
 
 // Todas as ações usam o login do instrutor: as políticas do banco (RLS)
@@ -576,6 +576,150 @@ export async function mostrarTemasNoTelao(
     .select("atividade_id");
   if (r.error || r.data.length === 0) return { erro: "Não foi possível mudar o telão." };
 
+  await avisarEvento(eventoId, "estado");
+  return {};
+}
+
+// ---------------------------------------------------------------
+// Mural das respostas de texto livre (docs/mural-abertas.md, migração 0034).
+// ---------------------------------------------------------------
+
+// Filtro por palavra no mural do telão (vazio = sem filtro). Volta para a página 1.
+export async function definirFiltroMural(
+  eventoId: string,
+  atividadeId: string,
+  filtroBruto: string,
+): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const filtro = textoLimpo(filtroBruto, 60) || null;
+  const r = await sessao.supabase
+    .from("atividades")
+    .update({ mural_filtro: filtro, mural_pagina: 1 })
+    .eq("id", atividadeId)
+    .eq("evento_id", eventoId)
+    .select("id");
+  if (r.error || r.data.length === 0) return { erro: "Não foi possível filtrar o mural. Tente de novo." };
+  await avisarEvento(eventoId, "estado");
+  return {};
+}
+
+// Página do mural no telão: um número fixa a página (o instrutor no controle);
+// null volta para o automático (troca sozinho a cada 15 s).
+export async function paginarMural(
+  eventoId: string,
+  atividadeId: string,
+  pagina: number | null,
+): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const mudancas =
+    pagina === null
+      ? { mural_automatico: true }
+      : { mural_automatico: false, mural_pagina: Math.max(1, Math.floor(pagina)) };
+  const r = await sessao.supabase
+    .from("atividades")
+    .update(mudancas)
+    .eq("id", atividadeId)
+    .eq("evento_id", eventoId)
+    .select("id");
+  if (r.error || r.data.length === 0) return { erro: "Não foi possível mudar a página. Tente de novo." };
+  await avisarEvento(eventoId, "estado");
+  return {};
+}
+
+// Resumo por IA das respostas que estão no mural (o filtro não muda o resumo).
+export async function gerarResumoAbertas(eventoId: string, atividadeId: string): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const { supabase } = sessao;
+
+  const atividade = await supabase
+    .from("atividades")
+    .select("tipo, enunciado, rodada_atual")
+    .eq("id", atividadeId)
+    .eq("evento_id", eventoId)
+    .maybeSingle();
+  if (atividade.error) return { erro: SEM_CONEXAO };
+  if (!atividade.data || atividade.data.tipo !== "aberta") return { erro: "Só a resposta aberta tem esse resumo." };
+
+  const todas = await supabase.rpc("respostas_abertas", { atividade: atividadeId });
+  if (todas.error) return { erro: SEM_CONEXAO };
+  const noMural = ((todas.data ?? []) as { id: string; texto: string; aprovada: boolean | null }[])
+    .filter((r) => r.aprovada === true)
+    .map((r) => ({ id: r.id, texto: r.texto }));
+  if (noMural.length < 3) return { erro: "Poucas respostas no mural para resumir: espere mais respostas." };
+
+  const sugestao = await resumirAbertas(atividade.data.enunciado, noMural);
+  if ("erro" in sugestao) return { erro: sugestao.erro };
+
+  // Resumo novo nunca vai direto ao telão: o instrutor revisa antes.
+  const gravado = await supabase.from("temas_abertas").upsert(
+    {
+      atividade_id: atividadeId,
+      rodada: atividade.data.rodada_atual,
+      sintese: sugestao.resumo.sintese,
+      temas: sugestao.resumo.temas,
+      no_telao: false,
+      modelo: sugestao.modelo,
+      gerado_em: new Date().toISOString(),
+    },
+    { onConflict: "atividade_id,rodada" },
+  );
+  if (gravado.error) return { erro: "Não foi possível guardar o resumo. Tente de novo." };
+
+  await avisarEvento(eventoId, "estado");
+  return {};
+}
+
+export async function renomearTemaAbertas(
+  eventoId: string,
+  atividadeId: string,
+  rodada: number,
+  indice: number,
+  tituloBruto: string,
+): Promise<{ erro?: string }> {
+  const titulo = textoLimpo(tituloBruto, 60);
+  if (!titulo) return { erro: "Dê um nome ao tema." };
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+
+  const atual = await sessao.supabase
+    .from("temas_abertas")
+    .select("temas")
+    .eq("atividade_id", atividadeId)
+    .eq("rodada", rodada)
+    .maybeSingle();
+  if (atual.error) return { erro: SEM_CONEXAO };
+  const temas = (atual.data?.temas ?? []) as { titulo: string; respostas: string[]; exemplo: string | null }[];
+  if (!temas[indice]) return { erro: "Tema não encontrado." };
+  const r = await sessao.supabase
+    .from("temas_abertas")
+    .update({ temas: temas.map((t, i) => (i === indice ? { ...t, titulo } : t)) })
+    .eq("atividade_id", atividadeId)
+    .eq("rodada", rodada)
+    .select("atividade_id");
+  if (r.error || r.data.length === 0) return { erro: "Não foi possível renomear." };
+
+  await avisarEvento(eventoId, "estado");
+  return {};
+}
+
+export async function mostrarResumoAbertasNoTelao(
+  eventoId: string,
+  atividadeId: string,
+  rodada: number,
+  mostrar: boolean,
+): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const r = await sessao.supabase
+    .from("temas_abertas")
+    .update({ no_telao: mostrar })
+    .eq("atividade_id", atividadeId)
+    .eq("rodada", rodada)
+    .select("atividade_id");
+  if (r.error || r.data.length === 0) return { erro: "Não foi possível mudar o telão." };
   await avisarEvento(eventoId, "estado");
   return {};
 }

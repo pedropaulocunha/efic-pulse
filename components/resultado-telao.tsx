@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 // Gráficos do telão: barras (múltipla escolha), pontos (ordenar), histograma
 // (escala e número), nuvem de palavras e mural (respostas abertas).
@@ -28,6 +28,7 @@ import {
   CORES_TEXTO,
   corDaPalavra,
 } from "@/lib/paleta";
+import { POR_PAGINA, TROCA_AUTOMATICA_MS, totalDePaginas, type MuralTelao, type ResumoAbertasTelao } from "@/lib/mural";
 import type { ResultadoAgregado, ResultadoTemas } from "@/utils/projecao";
 
 type Resultado<T extends ResultadoAgregado["tipo"]> = Extract<ResultadoAgregado, { tipo: T }>;
@@ -643,25 +644,96 @@ export function TemasNuvem({ temas }: { temas: ResultadoTemas }) {
 // Respostas abertas: mural com as que estão liberadas (entram na hora; o instrutor pode tirar), sem autor
 // ---------------------------------------------------------------
 
-export function MuralAbertas({ resultado }: { resultado: Resultado<"aberta"> }) {
-  const textos = resultado.aprovadas.slice(0, 12);
+export function MuralAbertas({ mural }: { mural: MuralTelao }) {
+  const paginas = totalDePaginas(mural.textos.length);
+  // Automático: troca sozinho a cada 15 s, em ciclo. Com página escolhida pelo
+  // instrutor, fica nela.
+  const [automatica, setAutomatica] = useState(0);
+  useEffect(() => {
+    if (mural.pagina !== null || paginas <= 1) return;
+    const relogio = setInterval(() => setAutomatica((n) => n + 1), TROCA_AUTOMATICA_MS);
+    return () => clearInterval(relogio);
+  }, [mural.pagina, paginas]);
+  const pagina = mural.pagina === null ? (automatica % paginas) + 1 : Math.min(mural.pagina, paginas);
+
+  const textos = mural.textos.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
+  const cabecalho = (mural.filtro || paginas > 1) && (
+    <p className="mb-[2cqh] flex justify-between gap-[2cqw] text-[1.4cqw] text-slate-500">
+      <span>
+        {mural.filtro
+          ? `Filtro: “${mural.filtro}” · ${mural.textos.length} ${mural.textos.length === 1 ? "resposta" : "respostas"}`
+          : ""}
+      </span>
+      <span className="tabular-nums">{paginas > 1 ? `Página ${pagina} de ${paginas}` : ""}</span>
+    </p>
+  );
   if (textos.length === 0) {
-    return <p className="w-full text-center text-[2.4cqw] text-slate-400">As respostas aparecem aqui assim que chegarem.</p>;
-  }
-  // Menos cartões, letra maior.
-  const tamanho = textos.length <= 3 ? "text-[2cqw]" : textos.length <= 6 ? "text-[1.7cqw]" : "text-[1.4cqw]";
-  const colunas = textos.length <= 2 ? "grid-cols-2" : textos.length <= 6 ? "grid-cols-3" : "grid-cols-4";
-  return (
-    <div className={`grid w-full ${colunas} gap-[1.5cqw]`}>
-      {textos.map((t, i) => (
-        <p
-          key={`${i}-${t}`}
-          className={`rounded-[0.8cqw] border-t-[0.6cqh] bg-slate-50 px-[1.5cqw] py-[2cqh] leading-snug text-slate-800 ${tamanho}`}
-          style={{ borderTopColor: CORES_TEXTO[i % CORES_TEXTO.length] }}
-        >
-          {t}
+    return (
+      <div className="w-full">
+        {cabecalho}
+        <p className="w-full text-center text-[2.4cqw] text-slate-400">
+          {mural.filtro ? "Nenhuma resposta com essa palavra." : "As respostas aparecem aqui assim que chegarem."}
         </p>
-      ))}
+      </div>
+    );
+  }
+  // Até 6 por página (3 colunas x 2 linhas); com poucas, letra maior.
+  const tamanho = textos.length <= 2 ? "text-[2.2cqw]" : textos.length <= 4 ? "text-[2cqw]" : "text-[1.8cqw]";
+  const colunas = textos.length <= 2 ? "grid-cols-2" : textos.length === 4 ? "grid-cols-2" : "grid-cols-3";
+  const primeiro = (pagina - 1) * POR_PAGINA;
+  return (
+    <div className="w-full">
+      {cabecalho}
+      <div className={`grid w-full ${colunas} gap-[1.5cqw]`}>
+        {textos.map((t, i) => (
+          <p
+            key={`${primeiro + i}-${t}`}
+            className={`rounded-[0.8cqw] border-t-[0.6cqh] bg-slate-50 px-[1.5cqw] py-[2cqh] leading-snug text-slate-800 ${tamanho}`}
+            style={{ borderTopColor: CORES_TEXTO[(primeiro + i) % CORES_TEXTO.length] }}
+          >
+            {t}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
+// Resumo por IA das respostas abertas: síntese no topo e temas em barras (% das
+// pessoas, contadas pelo Pulse), cada um com uma resposta de exemplo.
+// ---------------------------------------------------------------
+
+export function ResumoAbertas({ resumo }: { resumo: ResumoAbertasTelao }) {
+  const maior = Math.max(1, ...resumo.temas.map((t) => t.pessoas));
+  return (
+    <div className="w-full">
+      <p className="mb-[3cqh] border-l-[0.4cqw] border-[#0f4c64] pl-[1.5cqw] text-[1.9cqw] leading-snug text-slate-700">
+        {resumo.sintese}
+      </p>
+      <div className="grid w-full grid-cols-[minmax(0,40%)_1fr_auto] items-center gap-x-[2cqw] gap-y-[2.2cqh]">
+        {resumo.temas.map((t) => {
+          const cor = t.indice === 0 ? "#94a3b8" : corDaOpcao(t.indice - 1);
+          return (
+            <div key={t.indice} className="contents">
+              <div className="min-w-0">
+                <p className="truncate text-[2cqw] font-semibold leading-tight text-slate-900">{t.titulo}</p>
+                {t.exemplo && (
+                  <p className="mt-[0.4cqh] truncate text-[1.25cqw] italic leading-tight text-slate-500">“{t.exemplo}”</p>
+                )}
+              </div>
+              <BarraComparada fracao={t.pessoas / maior} cor={cor} />
+              <span className="min-w-[10cqw] whitespace-nowrap text-right text-[2cqw] tabular-nums text-slate-900">
+                {percentual(t.pessoas, resumo.total)}%
+                <span className="ml-[0.6cqw] text-[1.3cqw] text-slate-500">({t.pessoas})</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-[2.5cqh] text-right text-[1.2cqw] text-slate-400">
+        Resumo por IA · % das pessoas que responderam
+      </p>
     </div>
   );
 }

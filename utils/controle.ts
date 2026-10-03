@@ -8,6 +8,12 @@ import {
   type TipoAtividade,
 } from "@/lib/atividades";
 import { ordenarPorBloco, type Bloco } from "@/lib/blocos";
+import {
+  contarResumo,
+  filtrarMural,
+  type ResumoAbertasTelao,
+  type TemasAbertasGuardados,
+} from "@/lib/mural";
 import { iaConfigurada } from "@/utils/ia";
 import type { EstadoProjecao, ResultadoAgregado, ResultadoTemas } from "@/utils/projecao";
 
@@ -32,6 +38,9 @@ export type AtividadeControle = {
   tempo_resposta_seg: number | null;
   timer_fim: string | null;
   restante_ms: number | null; // timer: quanto falta, calculado no servidor
+  mural_filtro: string | null;
+  mural_pagina: number;
+  mural_automatico: boolean;
   respostas: number; // da rodada atual
 };
 
@@ -60,6 +69,16 @@ export type TemasControle = {
   novas: number; // palavras que chegaram depois do resumo (estão em Outros)
 };
 
+// Resumo por IA das respostas abertas da atividade selecionada (rodada atual).
+export type ResumoAbertasControle = {
+  atividadeId: string;
+  rodada: number;
+  noTelao: boolean;
+  geradoEm: string;
+  lista: TemasAbertasGuardados; // como guardado (para renomear)
+  resultado: ResumoAbertasTelao; // pessoas por tema, contadas pelas respostas no mural
+};
+
 export type EstadoControle = {
   evento: {
     id: string;
@@ -75,6 +94,7 @@ export type EstadoControle = {
   moderacao: Moderacao | null;
   previa: EstadoProjecao["atividade"];
   temas: TemasControle | null;
+  resumoAbertas: ResumoAbertasControle | null;
   iaConfigurada: boolean;
 };
 
@@ -189,7 +209,7 @@ export async function estadoControle(
       .maybeSingle(),
     supabase
       .from("atividades")
-      .select("id, ordem, bloco_id, tipo, enunciado, observacao, config, estado, resultado_visivel, referencia_revelada, rodada_atual, tempo_resposta_seg, timer_fim")
+      .select("id, ordem, bloco_id, tipo, enunciado, observacao, config, estado, resultado_visivel, referencia_revelada, rodada_atual, tempo_resposta_seg, timer_fim, mural_filtro, mural_pagina, mural_automatico")
       .eq("evento_id", eventoId),
     supabase.from("blocos").select("id, ordem, titulo").eq("evento_id", eventoId),
     supabase.from("inscricoes").select("id", { count: "exact", head: true }).eq("evento_id", eventoId),
@@ -228,6 +248,41 @@ export async function estadoControle(
   ]);
   // A prévia mostra os temas quando é isso que o telão mostra.
   if (previa && temas?.noTelao) previa.temas = temas.resultado;
+
+  // Texto livre: o mural da prévia (com o filtro e a página do telão) e o resumo por IA.
+  let resumoAbertas: ResumoAbertasControle | null = null;
+  if (selecionada && moderacao?.tipo === "aberta") {
+    const noMural = moderacao.respostas.filter((r) => r.aprovada === true).map((r) => ({ id: r.id, texto: r.texto }));
+    if (previa) {
+      previa.mural = {
+        textos: filtrarMural(
+          noMural.map((r) => r.texto),
+          selecionada.mural_filtro,
+        ),
+        filtro: selecionada.mural_filtro,
+        pagina: selecionada.mural_automatico ? null : selecionada.mural_pagina,
+      };
+    }
+    const guardado = await supabase
+      .from("temas_abertas")
+      .select("sintese, temas, no_telao, gerado_em")
+      .eq("atividade_id", selecionada.id)
+      .eq("rodada", selecionada.rodada_atual)
+      .maybeSingle();
+    if (guardado.error) throw guardado.error;
+    if (guardado.data) {
+      const lista = guardado.data.temas as TemasAbertasGuardados;
+      resumoAbertas = {
+        atividadeId: selecionada.id,
+        rodada: selecionada.rodada_atual,
+        noTelao: guardado.data.no_telao,
+        geradoEm: guardado.data.gerado_em,
+        lista,
+        resultado: contarResumo(guardado.data.sintese, lista, noMural),
+      };
+      if (previa && guardado.data.no_telao) previa.resumoAbertas = resumoAbertas.resultado;
+    }
+  }
   const cooperativa = evento.data.cooperativa as unknown as { nome: string } | null;
 
   return {
@@ -245,6 +300,7 @@ export async function estadoControle(
     moderacao,
     previa,
     temas,
+    resumoAbertas,
     iaConfigurada: iaConfigurada(),
   };
 }

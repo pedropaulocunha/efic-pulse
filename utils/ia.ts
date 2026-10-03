@@ -294,3 +294,134 @@ export async function sugerirTemas(
   if (temas.length === 0) return { erro: "A IA não encontrou temas nessas respostas. Tente de novo." };
   return { temas, modelo, uso, chamadas };
 }
+
+// ---------------------------------------------------------------
+// Respostas de texto livre (docs/mural-abertas.md, 0034): síntese + temas.
+// Cada resposta vai com um número curto ("r1", "r2"...) no lugar do id interno.
+// A IA classifica resposta por resposta; as que ela pular voltam numa 2ª chamada.
+// ---------------------------------------------------------------
+
+const REGRAS_ABERTAS = [
+  "Você resume respostas de texto livre de um treinamento presencial para cooperativas de crédito no Brasil.",
+  "Escreva em português do Brasil.",
+  "",
+  "Síntese:",
+  "- De 2 a 3 frases (até 400 caracteres) que digam o que a turma respondeu, de forma neutra e fiel.",
+  "- Sem nomes de pessoas, sem dados pessoais e sem inventar nada que não esteja nas respostas.",
+  "",
+  "Temas:",
+  "- De 3 a 6 temas (com menos de 8 respostas, de 1 a 3). Específicos e sem sobreposição.",
+  "- O título NUNCA repete a pergunta; diz o que as respostas têm em comum. Até 40 caracteres,",
+  '  só com a primeira letra maiúscula (ex.: "Contato logo no início do atraso"), sem aspas e sem emojis.',
+  "- Separe o que a pessoa NÃO CONSEGUE fazer (falta de dinheiro, doença, crise) do que ela NÃO QUER",
+  "  (desinteresse, prioriza outra dívida, desistência).",
+  "",
+  "Classificação:",
+  '- Classifique TODAS as respostas, uma por uma: no campo "chave" da classificação vai o "id" exatamente como recebido.',
+  '- Use o tema 0 ("Outros") só para o que não se encaixa em nenhum tema: no máximo 1 em cada 10 respostas.',
+  '- Para cada tema, indique em "exemplo" o id de uma resposta que represente bem o tema.',
+].join("\n");
+
+export type ResumoAbertasSugerido = {
+  sintese: string;
+  temas: { titulo: string; respostas: string[]; exemplo: string | null }[];
+};
+
+export async function resumirAbertas(
+  pergunta: string,
+  respostas: { id: string; texto: string }[],
+  modeloEscolhido?: string,
+): Promise<{ resumo: ResumoAbertasSugerido; modelo: string; uso: Uso; chamadas: number } | { erro: string }> {
+  const modelo = modeloEscolhido || process.env.OPENAI_MODEL || MODELO_PADRAO;
+  // Números curtos no lugar dos ids internos (menos texto para a IA, nada de interno sai).
+  const curtoParaId = new Map(respostas.map((r, i) => [`r${i + 1}`, r.id]));
+  const entrada = respostas.map((r, i) => ({ id: `r${i + 1}`, resposta: r.texto.slice(0, 500) }));
+
+  const primeira = await chamarOpenAI(
+    modelo,
+    REGRAS_ABERTAS,
+    { pergunta, respostas: entrada },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["sintese", "temas", "classificacao"],
+      properties: {
+        sintese: { type: "string" },
+        temas: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["numero", "titulo", "exemplo"],
+            properties: { numero: { type: "integer" }, titulo: { type: "string" }, exemplo: { type: "string" } },
+          },
+        },
+        classificacao: SCHEMA_CLASSIFICACAO,
+      },
+    },
+  );
+  if ("erro" in primeira) return { erro: primeira.erro };
+  const uso = { ...primeira.uso };
+  let chamadas = 1;
+
+  const bruto = primeira.dados as {
+    sintese?: string;
+    temas?: { numero?: number; titulo?: string; exemplo?: string }[];
+    classificacao?: { chave?: string; tema?: number }[];
+  };
+  const sintese = String(bruto.sintese ?? "").replace(/\s+/g, " ").trim().slice(0, 800);
+  if (!sintese) return { erro: "A IA não conseguiu escrever a síntese. Tente de novo." };
+
+  const titulos = new Map<number, { titulo: string; exemplo: string | null }>();
+  for (const t of bruto.temas ?? []) {
+    const titulo = primeiraMaiuscula(String(t.titulo ?? ""));
+    if (typeof t.numero === "number" && t.numero > 0 && titulo && titulo.toLowerCase() !== "outros") {
+      titulos.set(t.numero, { titulo, exemplo: curtoParaId.get(String(t.exemplo ?? "")) ?? null });
+    }
+    if (titulos.size === 6) break;
+  }
+  if (titulos.size === 0) return { erro: "A IA não encontrou temas nessas respostas. Tente de novo." };
+
+  const temaDe = new Map<string, number>(); // id curto -> tema (0 = Outros)
+  const registrar = (lista: { chave?: string; tema?: number }[] | undefined) => {
+    for (const c of lista ?? []) {
+      const curto = String(c.chave ?? "");
+      if (!curtoParaId.has(curto) || temaDe.has(curto)) continue;
+      temaDe.set(curto, typeof c.tema === "number" && titulos.has(c.tema) ? c.tema : 0);
+    }
+  };
+  registrar(bruto.classificacao);
+
+  // 2ª chamada, só se a IA pulou respostas.
+  const faltando = entrada.filter((r) => !temaDe.has(r.id));
+  if (faltando.length > 0) {
+    const segunda = await chamarOpenAI(
+      modelo,
+      REGRAS_ABERTAS +
+        "\n\nOs temas já foram definidos (lista abaixo). Classifique SOMENTE as respostas recebidas nesses temas, " +
+        'pelo número, no campo "chave" use o id da resposta; use 0 (Outros) só se nenhum servir.',
+      { pergunta, temas: [...titulos].map(([numero, t]) => ({ numero, titulo: t.titulo })), respostas: faltando },
+      {
+        type: "object",
+        additionalProperties: false,
+        required: ["classificacao"],
+        properties: { classificacao: SCHEMA_CLASSIFICACAO },
+      },
+    );
+    chamadas++;
+    if (!("erro" in segunda)) {
+      uso.entrada += segunda.uso.entrada;
+      uso.saida += segunda.uso.saida;
+      registrar((segunda.dados as { classificacao?: { chave?: string; tema?: number }[] }).classificacao);
+    }
+  }
+
+  const temas = [...titulos]
+    .map(([numero, t]) => {
+      const ids = entrada.filter((r) => temaDe.get(r.id) === numero).map((r) => curtoParaId.get(r.id)!);
+      return { titulo: t.titulo, respostas: ids, exemplo: t.exemplo && ids.includes(t.exemplo) ? t.exemplo : (ids[0] ?? null) };
+    })
+    .filter((t) => t.respostas.length > 0);
+  if (temas.length === 0) return { erro: "A IA não encontrou temas nessas respostas. Tente de novo." };
+  return { resumo: { sintese, temas }, modelo, uso, chamadas };
+}

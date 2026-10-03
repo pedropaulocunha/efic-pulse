@@ -15,6 +15,7 @@ import {
   NuvemPalavras,
   PontosOrdenar,
   RankingSelecao,
+  ResumoAbertas,
   TemasNuvem,
 } from "@/components/resultado-telao";
 import type { ConfigEscala, ConfigMultipla, ConfigNumero, ConfigOrdenar, ConfigSelecao } from "@/lib/atividades";
@@ -22,14 +23,10 @@ import type { EstadoProjecao, ResultadoAgregado } from "@/utils/projecao";
 
 export type AtividadeTelao = NonNullable<EstadoProjecao["atividade"]>;
 
-// "40 respostas", "1 resposta · rodada 2", "5 no mural".
+// "40 respostas", "1 resposta · rodada 2". No texto livre também conta todas as
+// respostas recebidas (o mural pode estar filtrado ou com alguma tirada pelo instrutor).
 function textoContagem(resultado: ResultadoAgregado, rodada: number) {
-  const base =
-    resultado.tipo === "aberta"
-      ? `${resultado.aprovadas.length} no mural`
-      : resultado.total === 1
-        ? "1 resposta"
-        : `${resultado.total} respostas`;
+  const base = resultado.total === 1 ? "1 resposta" : `${resultado.total} respostas`;
   return rodada > 1 ? `${base} · rodada ${rodada}` : base;
 }
 
@@ -81,7 +78,9 @@ function Resultado({ atividade }: { atividade: AtividadeTelao }) {
         <p className="my-auto w-full text-center text-[2.4cqw] text-slate-400">Nenhuma palavra ainda.</p>
       );
     case "aberta":
-      return <MuralAbertas resultado={r} />;
+      // Resumo por IA no lugar do mural, quando o instrutor escolheu mostrá-lo.
+      if (atividade.resumoAbertas) return <ResumoAbertas resumo={atividade.resumoAbertas} />;
+      return <MuralAbertas mural={atividade.mural ?? { textos: r.aprovadas, filtro: null, pagina: null }} />;
   }
 }
 

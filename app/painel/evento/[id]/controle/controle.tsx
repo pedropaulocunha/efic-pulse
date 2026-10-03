@@ -25,6 +25,7 @@ import {
 import type { AtividadeControle, EstadoControle } from "@/utils/controle";
 import { comandarAtividade, type Comando } from "../../acoes-atividades";
 import PainelModeracao from "./moderacao";
+import { PainelMural, PainelResumoAbertas } from "./mural";
 import PainelTemas from "./temas";
 
 const corEstado: Record<EstadoAtividade, string> = {
@@ -76,7 +77,7 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
     inicial,
     { ouvirRespostas: true, aoPerderSessao: () => router.replace("/login") },
   );
-  const { evento, atividades, blocos, participantes, moderacao, previa, temas, iaConfigurada } = dados;
+  const { evento, atividades, blocos, participantes, moderacao, previa, temas, resumoAbertas, iaConfigurada } = dados;
 
   const selecionada = atividades.find((a) => a.id === selecionadaId) ?? atividades[0] ?? null;
   const aberta = atividades.find((a) => a.estado === "aberta") ?? null;
@@ -211,8 +212,36 @@ export default function Controle({ inicial }: { inicial: EstadoControle }) {
                 {erro && <p className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-red-800">{erro}</p>}
               </div>
 
+              {moderacao?.tipo === "aberta" && moderacao.atividadeId === selecionada.id && (
+                <PainelMural
+                  eventoId={eventoId}
+                  atividadeId={selecionada.id}
+                  textosNoMural={moderacao.respostas.filter((r) => r.aprovada === true).map((r) => r.texto)}
+                  filtro={selecionada.mural_filtro}
+                  pagina={selecionada.mural_pagina}
+                  automatico={selecionada.mural_automatico}
+                  aoMudar={recarregar}
+                />
+              )}
+
               {moderacao && moderacao.atividadeId === selecionada.id && (
-                <PainelModeracao eventoId={eventoId} moderacao={moderacao} aoMudar={recarregar} />
+                <PainelModeracao
+                  eventoId={eventoId}
+                  moderacao={moderacao}
+                  filtro={selecionada.tipo === "aberta" ? selecionada.mural_filtro : null}
+                  aoMudar={recarregar}
+                />
+              )}
+
+              {selecionada.tipo === "aberta" && selecionada.estado !== "fechada" && (
+                <PainelResumoAbertas
+                  eventoId={eventoId}
+                  atividadeId={selecionada.id}
+                  resumo={resumoAbertas && resumoAbertas.atividadeId === selecionada.id ? resumoAbertas : null}
+                  iaConfigurada={iaConfigurada}
+                  resultadoVisivel={selecionada.resultado_visivel}
+                  aoMudar={recarregar}
+                />
               )}
 
               {selecionada.tipo === "nuvem" && selecionada.estado !== "fechada" && (

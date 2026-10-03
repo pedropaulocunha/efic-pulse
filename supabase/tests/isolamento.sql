@@ -260,6 +260,7 @@ begin
 end $$;
 
 -- Fatia 3: uma resposta aberta no evento do B, para os testes de moderação.
+-- (O resumo por IA dessa atividade, 0034, é criado logo depois dela.)
 insert into public.atividades (id, evento_id, bloco_id, ordem, tipo, enunciado, config)
 values ('00000000-0000-4000-e000-0000000000b2', '00000000-0000-4000-c000-00000000000b', '00000000-0000-4000-9000-0000000000b1', 2, 'aberta',
         'O que mais trava a cobrança?', '{"max_caracteres": 280}');
@@ -271,6 +272,11 @@ begin
   select '00000000-0000-4000-f000-0000000000b2', '00000000-0000-4000-e000-0000000000b2', id,
          '{"texto": "Texto do participante do B"}'
     from public.inscricoes where evento_id = '00000000-0000-4000-c000-00000000000b';
+
+  -- Resumo por IA das respostas abertas (0034) na atividade do B.
+  insert into public.temas_abertas (atividade_id, rodada, sintese, temas)
+  values ('00000000-0000-4000-e000-0000000000b2', 1, 'Síntese de teste.',
+          '[{"titulo": "Tema", "respostas": ["00000000-0000-4000-f000-0000000000b2"], "exemplo": null}]');
 
   -- Funções de moderação e de evento: nunca para o visitante sem login.
   if has_function_privilege('anon', 'public.respostas_abertas(uuid)', 'execute')
@@ -729,6 +735,24 @@ begin
     raise exception 'FALHOU: instrutor roda o comparativo da biblioteca';
   end if;
 
+  -- Resumo por IA das abertas (0034): não lê nem cria no evento do B.
+  if (select count(*) from public.temas_abertas where atividade_id = '00000000-0000-4000-e000-0000000000b2') <> 0 then
+    raise exception 'FALHOU: instrutor A lê o resumo das respostas abertas do B';
+  end if;
+  begin
+    insert into public.temas_abertas (atividade_id, rodada, sintese, temas)
+    values ('00000000-0000-4000-e000-0000000000b2', 2, 'Intrusa', '[{"titulo": "X", "respostas": [], "exemplo": null}]');
+    raise exception 'FALHOU: instrutor A criou resumo nas respostas abertas do B';
+  exception when insufficient_privilege then
+    null;
+  end;
+  -- O filtro do mural do B não muda pelo A (RLS das atividades).
+  update public.atividades set mural_filtro = 'intruso' where id = '00000000-0000-4000-e000-0000000000b2';
+  get diagnostics linhas = row_count;
+  if linhas <> 0 then
+    raise exception 'FALHOU: instrutor A mudou o mural do evento do B';
+  end if;
+
   -- Temas por IA (0031): não lê, não cria e não vê o resultado dos temas do B.
   if (select count(*) from public.temas_nuvem where atividade_id = '00000000-0000-4000-e000-0000000000b1') <> 0 then
     raise exception 'FALHOU: instrutor A lê os temas da nuvem do B';
@@ -960,6 +984,12 @@ begin
   begin
     perform public.relatorio_respostas('00000000-0000-4000-c000-00000000000a');
     raise exception 'FALHOU: visitante sem login lê o relatório';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform 1 from public.temas_abertas;
+    raise exception 'FALHOU: visitante sem login lê o resumo das respostas abertas';
   exception when insufficient_privilege then
     null;
   end;

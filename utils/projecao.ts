@@ -6,6 +6,13 @@ import {
   type EstadoAtividade,
   type TipoAtividade,
 } from "@/lib/atividades";
+import {
+  contarResumo,
+  filtrarMural,
+  type MuralTelao,
+  type ResumoAbertasTelao,
+  type TemasAbertasGuardados,
+} from "@/lib/mural";
 import { criarClienteServico } from "@/utils/supabase/servico";
 
 // O que o telão mostra. Sem login: quem tem o link da projeção só vê, não comanda.
@@ -57,6 +64,9 @@ export type EstadoProjecao = {
     resultadoRodada1: ResultadoAgregado | null;
     // Nuvem: temas por IA no lugar das palavras, quando o instrutor escolheu mostrá-los.
     temas?: ResultadoTemas | null;
+    // Texto livre: o mural (filtrado, com a página) e, se escolhido, o resumo por IA.
+    mural?: MuralTelao | null;
+    resumoAbertas?: ResumoAbertasTelao | null;
   } | null;
 };
 
@@ -84,7 +94,7 @@ export async function estadoProjecao(token: string): Promise<EstadoProjecao | nu
 
   const atividade = await db
     .from("atividades")
-    .select("id, tipo, enunciado, config, estado, resultado_visivel, referencia_revelada, rodada_atual, timer_fim")
+    .select("id, tipo, enunciado, config, estado, resultado_visivel, referencia_revelada, rodada_atual, timer_fim, mural_filtro, mural_pagina, mural_automatico")
     .eq("id", e.atividade_atual_id)
     .single();
   if (atividade.error) throw atividade.error;
@@ -131,6 +141,43 @@ export async function estadoProjecao(token: string): Promise<EstadoProjecao | nu
     }
   }
 
+  // Texto livre: todas as respostas no mural, em ordem de chegada (a página e o
+  // filtro ficam com o instrutor); e o resumo por IA, se for ele que vai ao telão.
+  let mural: MuralTelao | null = null;
+  let resumoAbertas: ResumoAbertasTelao | null = null;
+  if (a.resultado_visivel && a.tipo === "aberta") {
+    const [noMural, resumo] = await Promise.all([
+      db
+        .from("respostas")
+        .select("id, valor")
+        .eq("atividade_id", a.id)
+        .eq("rodada", a.rodada_atual)
+        .eq("aprovada", true)
+        .order("criado_em")
+        .order("id"),
+      db
+        .from("temas_abertas")
+        .select("sintese, temas, no_telao")
+        .eq("atividade_id", a.id)
+        .eq("rodada", a.rodada_atual)
+        .maybeSingle(),
+    ]);
+    if (noMural.error) throw noMural.error;
+    if (resumo.error) throw resumo.error;
+    const lista = noMural.data.map((r) => ({ id: r.id as string, texto: String((r.valor as { texto?: string }).texto ?? "") }));
+    mural = {
+      textos: filtrarMural(
+        lista.map((r) => r.texto),
+        a.mural_filtro,
+      ),
+      filtro: a.mural_filtro,
+      pagina: a.mural_automatico ? null : a.mural_pagina,
+    };
+    if (resumo.data?.no_telao) {
+      resumoAbertas = contarResumo(resumo.data.sintese, resumo.data.temas as TemasAbertasGuardados, lista);
+    }
+  }
+
   return {
     ...base,
     atividade: {
@@ -144,6 +191,8 @@ export async function estadoProjecao(token: string): Promise<EstadoProjecao | nu
       resultado,
       resultadoRodada1,
       temas,
+      mural,
+      resumoAbertas,
     },
   };
 }
