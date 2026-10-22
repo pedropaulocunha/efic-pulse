@@ -174,6 +174,9 @@ export default async function PaginaEvento({ params }: PageProps<"/painel/evento
             <Link href={`/painel/evento/${e.id}/editar`} className={estiloBotaoSecundario}>
               Editar evento
             </Link>
+            <Link href={`/painel/evento/${e.id}/duplicar`} className={estiloBotaoSecundario}>
+              Duplicar evento
+            </Link>
             <BotaoEstadoEvento eventoId={e.id} encerrado={encerrado} podeReabrir={ehAdmin} />
           </div>
         </div>
