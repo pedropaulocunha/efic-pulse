@@ -140,6 +140,14 @@ export default async function PaginaModelo({ params }: PageProps<"/painel/biblio
                       <p className="mt-1 line-clamp-2 text-sm italic text-slate-500">Obs.: {p.observacao}</p>
                     )}
                   </div>
+                  {usadas.has(p.id) && (p.tipo === "aberta" || p.tipo === "nuvem") && (
+                    <Link
+                      href={`/painel/biblioteca/${m.id}/pergunta/${p.id}/consolidado`}
+                      className={estiloBotaoSecundario}
+                    >
+                      Consolidado
+                    </Link>
+                  )}
                   <BotoesPerguntaModelo
                     modeloId={m.id}
                     perguntaId={p.id}

@@ -147,6 +147,10 @@ insert into public.modelo_perguntas (id, modelo_id, ordem, tipo, enunciado, conf
 values ('00000000-0000-4000-8000-0000000000f1', '00000000-0000-4000-8000-000000000001', 1, 'multipla',
         'Como você chegou hoje?', '{"opcoes": ["Animado", "Cansado"]}');
 
+-- Consolidado por IA (0036) da pergunta do modelo.
+insert into public.consolidados (modelo_pergunta_id, temas, mapa)
+values ('00000000-0000-4000-8000-0000000000f1', '["Tema"]', '{}');
+
 -- Atividades: duas no evento do A (múltipla e escala com referência), uma no do B (nuvem).
 insert into public.atividades (id, evento_id, bloco_id, ordem, tipo, enunciado, config)
 values
@@ -731,6 +735,18 @@ begin
   exception when check_violation then
     null;
   end;
+  -- Consolidado (0036): só o admin.
+  if (select count(*) from public.consolidados) <> 0
+     or public.consolidado_respostas('00000000-0000-4000-8000-0000000000f1') is not null then
+    raise exception 'FALHOU: instrutor lê o consolidado da biblioteca';
+  end if;
+  begin
+    insert into public.consolidados (modelo_pergunta_id, temas, mapa)
+    values ('00000000-0000-4000-8000-0000000000f1', '["Intruso"]', '{}');
+    raise exception 'FALHOU: instrutor criou consolidado';
+  exception when insufficient_privilege or unique_violation then
+    null;
+  end;
   if public.perguntas_para_ligar('00000000-0000-4000-8000-000000000001') is not null
      or public.ligar_perguntas_ao_modelo('00000000-0000-4000-8000-000000000001') is not null then
     raise exception 'FALHOU: instrutor liga perguntas ao modelo da biblioteca';
@@ -902,6 +918,12 @@ begin
     raise exception 'FALHOU: admin não ajustou o texto da pergunta da biblioteca';
   end if;
 
+  -- Consolidado (0036): o admin lê as respostas e o consolidado.
+  if public.consolidado_respostas('00000000-0000-4000-8000-0000000000f1') is null
+     or (select count(*) from public.consolidados) <> 1 then
+    raise exception 'FALHOU: admin não lê o consolidado';
+  end if;
+
   -- Ligar ao modelo (0035): pergunta idêntica já existente no evento do B.
   insert into public.atividades (id, evento_id, bloco_id, ordem, tipo, enunciado, config)
   values ('00000000-0000-4000-e000-0000000000b9', '00000000-0000-4000-c000-00000000000b',
@@ -996,6 +1018,12 @@ begin
   begin
     perform 1 from public.modelos;
     raise exception 'FALHOU: visitante sem login lê a biblioteca';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform 1 from public.consolidados;
+    raise exception 'FALHOU: visitante sem login lê o consolidado';
   exception when insufficient_privilege then
     null;
   end;

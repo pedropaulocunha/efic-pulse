@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import type { EstadoFormularioPergunta } from "@/components/formulario-pergunta";
 import { lerTempoResposta, TIPOS, validarConfig, type TipoAtividade } from "@/lib/atividades";
 import { textoLimpo, uuidValido } from "@/lib/formatos";
+import { itensDoConsolidado, type DadosConsolidado } from "@/lib/consolidado";
+import { classificarEmTemas, consolidarComIA } from "@/utils/ia";
 import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
 
@@ -179,4 +181,120 @@ export async function ligarPerguntasAoModelo(modeloId: string): Promise<{ erro?:
   if (error || data === null) return { erro: "Não foi possível ligar as perguntas. Só o admin pode fazer isso." };
   atualizar(modeloId);
   return { ligadas: data as number };
+}
+
+// ---------------------------------------------------------------
+// Consolidado por IA de uma pergunta do modelo com todas as turmas (0036,
+// docs/consolidado.md). Só admin (o banco confere).
+// ---------------------------------------------------------------
+
+const DATA_CONSOLIDADO = /^\d{4}-\d{2}-\d{2}$/;
+
+function caminhoConsolidado(modeloId: string, perguntaId: string) {
+  return `/painel/biblioteca/${modeloId}/pergunta/${perguntaId}/consolidado`;
+}
+
+export async function gerarConsolidado(
+  modeloId: string,
+  perguntaId: string,
+  deBruto: string,
+  ateBruto: string,
+): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const { supabase } = sessao;
+  const de = DATA_CONSOLIDADO.test(deBruto) ? deBruto : null;
+  const ate = DATA_CONSOLIDADO.test(ateBruto) ? ateBruto : null;
+
+  const pergunta = await supabase
+    .from("modelo_perguntas")
+    .select("enunciado, tipo")
+    .eq("id", perguntaId)
+    .eq("modelo_id", modeloId)
+    .maybeSingle();
+  if (pergunta.error) return { erro: SEM_CONEXAO };
+  if (!pergunta.data || !["aberta", "nuvem"].includes(pergunta.data.tipo)) {
+    return { erro: "O consolidado por IA vale para perguntas de texto livre e de nuvem." };
+  }
+
+  const dados = await supabase.rpc("consolidado_respostas", { pergunta: perguntaId, de, ate });
+  if (dados.error || dados.data === null) return { erro: "Não foi possível ler as respostas. Só o admin usa o consolidado." };
+  const itens = itensDoConsolidado(dados.data as DadosConsolidado);
+  if (itens.length < 5) return { erro: "Poucas respostas nesse período para consolidar (mínimo 5)." };
+
+  const r = await consolidarComIA(pergunta.data.enunciado, itens);
+  if ("erro" in r) return { erro: r.erro };
+
+  const gravado = await supabase.from("consolidados").upsert(
+    {
+      modelo_pergunta_id: perguntaId,
+      de,
+      ate,
+      sintese: r.sintese,
+      temas: r.temas,
+      mapa: r.mapa,
+      modelo: r.modelo,
+      gerado_em: new Date().toISOString(),
+    },
+    { onConflict: "modelo_pergunta_id" },
+  );
+  if (gravado.error) return { erro: "Não foi possível guardar o consolidado. Tente de novo." };
+  revalidatePath(caminhoConsolidado(modeloId, perguntaId));
+  return {};
+}
+
+// Respostas que chegaram depois do consolidado: classifica só elas, nos temas que já existem.
+export async function classificarNovasNoConsolidado(modeloId: string, perguntaId: string): Promise<{ erro?: string }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const { supabase } = sessao;
+
+  const [pergunta, atual] = await Promise.all([
+    supabase.from("modelo_perguntas").select("enunciado").eq("id", perguntaId).maybeSingle(),
+    supabase.from("consolidados").select("de, ate, temas, mapa").eq("modelo_pergunta_id", perguntaId).maybeSingle(),
+  ]);
+  if (pergunta.error || atual.error) return { erro: SEM_CONEXAO };
+  if (!pergunta.data || !atual.data) return { erro: "Gere o consolidado primeiro." };
+
+  const dados = await supabase.rpc("consolidado_respostas", { pergunta: perguntaId, de: atual.data.de, ate: atual.data.ate });
+  if (dados.error || dados.data === null) return { erro: SEM_CONEXAO };
+  const mapa = atual.data.mapa as Record<string, number>;
+  const novos = itensDoConsolidado(dados.data as DadosConsolidado).filter((x) => !(x.chave in mapa));
+  if (novos.length === 0) return {};
+
+  const temas = atual.data.temas as string[];
+  const r = await classificarEmTemas(pergunta.data.enunciado, temas, novos);
+  if ("erro" in r) return { erro: r.erro };
+  const gravado = await supabase
+    .from("consolidados")
+    .update({ mapa: { ...mapa, ...r.mapa } })
+    .eq("modelo_pergunta_id", perguntaId)
+    .select("modelo_pergunta_id");
+  if (gravado.error || gravado.data.length === 0) return { erro: "Não foi possível guardar. Tente de novo." };
+  revalidatePath(caminhoConsolidado(modeloId, perguntaId));
+  return {};
+}
+
+export async function renomearTemaConsolidado(
+  modeloId: string,
+  perguntaId: string,
+  numero: number,
+  tituloBruto: string,
+): Promise<{ erro?: string }> {
+  const titulo = textoLimpo(tituloBruto, 60);
+  if (!titulo) return { erro: "Dê um nome ao tema." };
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const atual = await sessao.supabase.from("consolidados").select("temas").eq("modelo_pergunta_id", perguntaId).maybeSingle();
+  if (atual.error) return { erro: SEM_CONEXAO };
+  const temas = (atual.data?.temas ?? []) as string[];
+  if (!temas[numero - 1]) return { erro: "Tema não encontrado." };
+  const r = await sessao.supabase
+    .from("consolidados")
+    .update({ temas: temas.map((t, i) => (i === numero - 1 ? titulo : t)) })
+    .eq("modelo_pergunta_id", perguntaId)
+    .select("modelo_pergunta_id");
+  if (r.error || r.data.length === 0) return { erro: "Não foi possível renomear." };
+  revalidatePath(caminhoConsolidado(modeloId, perguntaId));
+  return {};
 }

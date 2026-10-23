@@ -425,3 +425,146 @@ export async function resumirAbertas(
   if (temas.length === 0) return { erro: "A IA não encontrou temas nessas respostas. Tente de novo." };
   return { resumo: { sintese, temas }, modelo, uso, chamadas };
 }
+
+// ---------------------------------------------------------------
+// Consolidado de uma pergunta da biblioteca, com todas as turmas (0036,
+// docs/consolidado.md). Um único conjunto de temas para todos os eventos.
+// Itens: respostas abertas (chave = id da resposta) ou palavras da nuvem
+// (chave = palavra normalizada). Com muitos itens, a IA define os temas com os
+// primeiros 250 e classifica o resto em lotes de 250 nos mesmos temas.
+// ---------------------------------------------------------------
+
+const LOTE_CONSOLIDADO = 250;
+
+const REGRAS_CONSOLIDADO = [
+  "Você consolida respostas de VÁRIAS turmas de treinamentos presenciais para cooperativas de crédito no Brasil,",
+  "todas à mesma pergunta. Escreva em português do Brasil.",
+  "",
+  "Síntese:",
+  "- De 2 a 4 frases (até 600 caracteres) sobre o conjunto das respostas, neutra e fiel, sem nomes nem dados pessoais.",
+  "",
+  "Temas:",
+  "- De 5 a 8 temas (com menos de 20 itens, de 2 a 5), específicos e sem sobreposição, que sirvam para comparar turmas.",
+  "- O título NUNCA repete a pergunta. Até 40 caracteres, só com a primeira letra maiúscula, sem aspas e sem emojis.",
+  "- Separe o que a pessoa NÃO CONSEGUE fazer (falta de dinheiro, doença, crise) do que ela NÃO QUER",
+  "  (desinteresse, prioriza outra dívida, desistência). Separe emoções diferentes (vergonha, raiva, ansiedade...).",
+  "",
+  "Classificação:",
+  '- Classifique TODOS os itens recebidos: no campo "chave" da classificação vai o "id" exatamente como recebido.',
+  "- Masculino/feminino, singular/plural, erros de digitação e frases com a mesma ideia vão para o mesmo tema.",
+  '- Use o tema 0 ("Outros") só para o que não se encaixa: no máximo 1 em cada 10 itens.',
+  '- "vezes" é quantas vezes o item apareceu: use para decidir o que importa, nunca para contar.',
+].join("\n");
+
+type ItemConsolidado = { chave: string; texto: string; vezes: number };
+
+// Classifica itens em temas já definidos (lotes de 250). Devolve chave -> número do tema (1..n) ou 0.
+export async function classificarEmTemas(
+  pergunta: string,
+  temas: string[],
+  itens: ItemConsolidado[],
+  modeloEscolhido?: string,
+): Promise<{ mapa: Record<string, number>; uso: Uso } | { erro: string }> {
+  const modelo = modeloEscolhido || process.env.OPENAI_MODEL || MODELO_PADRAO;
+  const mapa: Record<string, number> = {};
+  const uso: Uso = { entrada: 0, saida: 0 };
+  for (let i = 0; i < itens.length; i += LOTE_CONSOLIDADO) {
+    const lote = itens.slice(i, i + LOTE_CONSOLIDADO);
+    const curto = new Map(lote.map((x, k) => [`i${k + 1}`, x.chave]));
+    const r = await chamarOpenAI(
+      modelo,
+      REGRAS_CONSOLIDADO +
+        "\n\nOs temas já foram definidos (lista abaixo). Classifique SOMENTE os itens recebidos nesses temas, pelo número; " +
+        "use 0 (Outros) só se nenhum servir.",
+      {
+        pergunta,
+        temas: temas.map((titulo, k) => ({ numero: k + 1, titulo })),
+        itens: lote.map((x, k) => ({ id: `i${k + 1}`, resposta: x.texto.slice(0, 500), vezes: x.vezes })),
+      },
+      { type: "object", additionalProperties: false, required: ["classificacao"], properties: { classificacao: SCHEMA_CLASSIFICACAO } },
+    );
+    if ("erro" in r) return { erro: r.erro };
+    uso.entrada += r.uso.entrada;
+    uso.saida += r.uso.saida;
+    for (const c of (r.dados as { classificacao?: { chave?: string; tema?: number }[] }).classificacao ?? []) {
+      const chave = curto.get(String(c.chave ?? ""));
+      if (!chave || chave in mapa) continue;
+      mapa[chave] = typeof c.tema === "number" && c.tema >= 1 && c.tema <= temas.length ? c.tema : 0;
+    }
+  }
+  return { mapa, uso };
+}
+
+export async function consolidarComIA(
+  pergunta: string,
+  itens: ItemConsolidado[],
+  modeloEscolhido?: string,
+): Promise<{ sintese: string; temas: string[]; mapa: Record<string, number>; modelo: string; uso: Uso } | { erro: string }> {
+  const modelo = modeloEscolhido || process.env.OPENAI_MODEL || MODELO_PADRAO;
+  // Os mais citados primeiro: a amostra que define os temas é a mais representativa.
+  const ordenados = [...itens].sort((a, b) => b.vezes - a.vezes);
+  const amostra = ordenados.slice(0, LOTE_CONSOLIDADO);
+  const curto = new Map(amostra.map((x, k) => [`i${k + 1}`, x.chave]));
+
+  const primeira = await chamarOpenAI(
+    modelo,
+    REGRAS_CONSOLIDADO,
+    { pergunta, itens: amostra.map((x, k) => ({ id: `i${k + 1}`, resposta: x.texto.slice(0, 500), vezes: x.vezes })) },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["sintese", "temas", "classificacao"],
+      properties: {
+        sintese: { type: "string" },
+        temas: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["numero", "titulo"],
+            properties: { numero: { type: "integer" }, titulo: { type: "string" } },
+          },
+        },
+        classificacao: SCHEMA_CLASSIFICACAO,
+      },
+    },
+  );
+  if ("erro" in primeira) return { erro: primeira.erro };
+  const uso = { ...primeira.uso };
+  const bruto = primeira.dados as {
+    sintese?: string;
+    temas?: { numero?: number; titulo?: string }[];
+    classificacao?: { chave?: string; tema?: number }[];
+  };
+  const sintese = String(bruto.sintese ?? "").replace(/\s+/g, " ").trim().slice(0, 1000);
+
+  // Temas na ordem em que a IA devolveu, renumerados 1..n.
+  const numeroNovo = new Map<number, number>();
+  const temas: string[] = [];
+  for (const t of bruto.temas ?? []) {
+    const titulo = primeiraMaiuscula(String(t.titulo ?? ""));
+    if (typeof t.numero !== "number" || !titulo || titulo.toLowerCase() === "outros" || numeroNovo.has(t.numero)) continue;
+    temas.push(titulo);
+    numeroNovo.set(t.numero, temas.length);
+    if (temas.length === 8) break;
+  }
+  if (temas.length === 0 || !sintese) return { erro: "A IA não conseguiu consolidar essas respostas. Tente de novo." };
+
+  const mapa: Record<string, number> = {};
+  for (const c of bruto.classificacao ?? []) {
+    const chave = curto.get(String(c.chave ?? ""));
+    if (!chave || chave in mapa) continue;
+    mapa[chave] = typeof c.tema === "number" ? (numeroNovo.get(c.tema) ?? 0) : 0;
+  }
+
+  // O resto (e o que a IA pulou na amostra) vai em lotes, nos mesmos temas.
+  const faltando = ordenados.filter((x) => !(x.chave in mapa));
+  if (faltando.length > 0) {
+    const resto = await classificarEmTemas(pergunta, temas, faltando, modelo);
+    if ("erro" in resto) return { erro: resto.erro };
+    Object.assign(mapa, resto.mapa);
+    uso.entrada += resto.uso.entrada;
+    uso.saida += resto.uso.saida;
+  }
+  return { sintese, temas, mapa, modelo, uso };
+}
