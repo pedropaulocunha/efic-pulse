@@ -731,6 +731,10 @@ begin
   exception when check_violation then
     null;
   end;
+  if public.perguntas_para_ligar('00000000-0000-4000-8000-000000000001') is not null
+     or public.ligar_perguntas_ao_modelo('00000000-0000-4000-8000-000000000001') is not null then
+    raise exception 'FALHOU: instrutor liga perguntas ao modelo da biblioteca';
+  end if;
   if public.comparativo_modelo('00000000-0000-4000-8000-000000000001') is not null then
     raise exception 'FALHOU: instrutor roda o comparativo da biblioteca';
   end if;
@@ -898,6 +902,26 @@ begin
     raise exception 'FALHOU: admin não ajustou o texto da pergunta da biblioteca';
   end if;
 
+  -- Ligar ao modelo (0035): pergunta idêntica já existente no evento do B.
+  insert into public.atividades (id, evento_id, bloco_id, ordem, tipo, enunciado, config)
+  values ('00000000-0000-4000-e000-0000000000b9', '00000000-0000-4000-c000-00000000000b',
+          '00000000-0000-4000-9000-0000000000b1', 9, 'multipla', 'Como você chegou hoje ao treinamento?',
+          '{"opcoes": ["Animado", "Cansado"]}');
+  -- Liga primeiro e confere depois (na mesma comparação, a leitura não veria a ligação).
+  linhas := public.ligar_perguntas_ao_modelo('00000000-0000-4000-8000-000000000001');
+  if linhas <> 1
+     or (select modelo_pergunta_id from public.atividades where id = '00000000-0000-4000-e000-0000000000b9')
+        is distinct from '00000000-0000-4000-8000-0000000000f1' then
+    raise exception 'FALHOU: admin não ligou a pergunta idêntica ao modelo';
+  end if;
+  begin
+    update public.atividades set modelo_pergunta_id = null where id = '00000000-0000-4000-e000-0000000000b9';
+    raise exception 'FALHOU: desfez a ligação com a biblioteca';
+  exception when check_violation then
+    null;
+  end;
+  delete from public.atividades where id = '00000000-0000-4000-e000-0000000000b9';
+
   -- Admin vê os temas e o resultado dos temas de qualquer evento.
   if public.resultado_temas('00000000-0000-4000-e000-0000000000b1') is null then
     raise exception 'FALHOU: admin não vê o resultado dos temas do B';
@@ -972,6 +996,12 @@ begin
   begin
     perform 1 from public.modelos;
     raise exception 'FALHOU: visitante sem login lê a biblioteca';
+  exception when insufficient_privilege then
+    null;
+  end;
+  begin
+    perform public.ligar_perguntas_ao_modelo('00000000-0000-4000-8000-000000000001');
+    raise exception 'FALHOU: visitante sem login liga perguntas ao modelo';
   exception when insufficient_privilege then
     null;
   end;

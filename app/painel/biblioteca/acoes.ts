@@ -169,3 +169,14 @@ export async function moverPerguntaModelo(modeloId: string, perguntaId: string, 
   await sessao.supabase.rpc("mover_pergunta_modelo", { pergunta: perguntaId, direcao });
   atualizar(modeloId);
 }
+
+// Liga ao modelo as perguntas idênticas que já existiam em eventos (0035), para
+// esses eventos entrarem no comparativo. Só admin (o banco confere).
+export async function ligarPerguntasAoModelo(modeloId: string): Promise<{ erro?: string; ligadas?: number }> {
+  const sessao = await exigirLogin();
+  if ("erro" in sessao) return { erro: sessao.erro };
+  const { data, error } = await sessao.supabase.rpc("ligar_perguntas_ao_modelo", { modelo: modeloId });
+  if (error || data === null) return { erro: "Não foi possível ligar as perguntas. Só o admin pode fazer isso." };
+  atualizar(modeloId);
+  return { ligadas: data as number };
+}

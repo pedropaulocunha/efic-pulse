@@ -12,7 +12,7 @@ import {
 import { uuidValido } from "@/lib/formatos";
 import { usuarioAtual } from "@/utils/auth";
 import { criarClienteServidor } from "@/utils/supabase/server";
-import { BotoesModelo, BotoesPerguntaModelo, TituloModelo } from "../componentes";
+import { BotoesModelo, BotoesPerguntaModelo, LigarAoModelo, TituloModelo } from "../componentes";
 
 type Pergunta = {
   id: string;
@@ -81,6 +81,11 @@ export default async function PaginaModelo({ params }: PageProps<"/painel/biblio
 
   const m = modelo.data;
 
+  // Perguntas idênticas em eventos que não usaram a biblioteca (para ligar, 0035).
+  const paraLigar = await supabase.rpc("perguntas_para_ligar", { modelo: id });
+  if (paraLigar.error) return <AvisoErroConexao />;
+  const candidatas = (paraLigar.data ?? []) as { atividade: string; nome_turma: string; data_inicio: string; enunciado: string }[];
+
   return (
     <div className="flex flex-1 flex-col">
       <CabecalhoPainel />
@@ -147,6 +152,8 @@ export default async function PaginaModelo({ params }: PageProps<"/painel/biblio
             </ol>
           )}
         </section>
+
+        <LigarAoModelo modeloId={m.id} candidatas={candidatas} />
 
         <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-6">
           <h2 className="text-lg font-medium text-slate-700">Comparativo entre eventos (Excel)</h2>

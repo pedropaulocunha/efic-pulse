@@ -8,6 +8,7 @@ import {
   criarModelo,
   duplicarModelo,
   excluirPerguntaModelo,
+  ligarPerguntasAoModelo,
   moverPerguntaModelo,
   renomearModelo,
 } from "./acoes";
@@ -226,5 +227,53 @@ export function BotoesPerguntaModelo({
       )}
       {erro && <span className="text-sm text-red-700">{erro}</span>}
     </div>
+  );
+}
+
+// Perguntas iguais às do modelo em eventos que não usaram a biblioteca: ligar todas.
+export function LigarAoModelo({
+  modeloId,
+  candidatas,
+}: {
+  modeloId: string;
+  candidatas: { atividade: string; nome_turma: string; data_inicio: string; enunciado: string }[];
+}) {
+  const [ocupado, iniciar] = useTransition();
+  const [mensagem, setMensagem] = useState<string>();
+
+  if (candidatas.length === 0) return null;
+  const eventos = new Set(candidatas.map((c) => c.nome_turma)).size;
+  return (
+    <section className="mt-10 rounded-2xl border border-amber-200 bg-amber-50 p-6">
+      <h2 className="text-lg font-medium text-slate-800">Perguntas iguais em outros eventos</h2>
+      <p className="mt-1 text-slate-600">
+        {candidatas.length === 1 ? "1 pergunta idêntica" : `${candidatas.length} perguntas idênticas`} às deste modelo, em{" "}
+        {eventos === 1 ? "1 evento" : `${eventos} eventos`} que não usaram a biblioteca. Ligadas ao modelo, elas entram
+        no comparativo e passam a não poder ser editadas no evento, como as perguntas da biblioteca.
+      </p>
+      <ul className="mt-3 space-y-1 text-sm text-slate-700">
+        {candidatas.map((c) => (
+          <li key={c.atividade}>
+            <strong>{c.nome_turma}</strong> · {c.enunciado}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={ocupado}
+          onClick={() =>
+            iniciar(async () => {
+              const r = await ligarPerguntasAoModelo(modeloId);
+              setMensagem(r.erro ?? `${r.ligadas} ${r.ligadas === 1 ? "pergunta ligada" : "perguntas ligadas"} ao modelo.`);
+            })
+          }
+          className={estiloBotaoCompacto}
+        >
+          {ocupado ? "Ligando…" : "Ligar ao modelo"}
+        </button>
+        {mensagem && <span className="text-sm text-slate-700">{mensagem}</span>}
+      </div>
+    </section>
   );
 }
