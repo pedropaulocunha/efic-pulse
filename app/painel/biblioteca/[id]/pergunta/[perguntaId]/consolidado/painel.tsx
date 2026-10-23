@@ -128,7 +128,22 @@ function Resultado({
   const B = somarGrupo(porEvento, idsB, n);
 
   // Temas na ordem da IA; Outros (0) por último; "Sem tema" só se houver respostas novas.
-  const linhas = [...c.temas.map((t, i) => ({ numero: i + 1, titulo: t })), { numero: 0, titulo: "Outros" }];
+  // Ordenação pelo clique no título da coluna: maior primeiro, menor primeiro, ordem da IA. Outros fica sempre no fim.
+  const [ordem, setOrdem] = useState<{ coluna: "A" | "B"; desc: boolean } | null>(null);
+  const coluna = ordem && (ordem.coluna === "A" || comparando) ? ordem : null;
+  const temas = c.temas.map((t, i) => ({ numero: i + 1, titulo: t }));
+  if (coluna) {
+    const g = coluna.coluna === "A" ? A : B;
+    temas.sort((x, y) => (pct(g.porTema[y.numero], g.total) - pct(g.porTema[x.numero], g.total)) * (coluna.desc ? 1 : -1));
+  }
+  const linhas = [...temas, { numero: 0, titulo: "Outros" }];
+  const ordenarPor = (col: "A" | "B") =>
+    setOrdem(coluna?.coluna !== col ? { coluna: col, desc: true } : coluna.desc ? { coluna: col, desc: false } : null);
+  const tituloColuna = (col: "A" | "B", texto: string) => (
+    <button type="button" onClick={() => ordenarPor(col)} className="font-medium hover:text-slate-900" title="Ordenar">
+      {texto} {coluna?.coluna === col ? (coluna.desc ? "↓" : "↑") : <span className="text-slate-300">↕</span>}
+    </button>
+  );
 
   const alternar = (id: string) => setGrupoA(grupoA.includes(id) ? grupoA.filter((x) => x !== id) : [...grupoA, id]);
 
@@ -171,7 +186,7 @@ function Resultado({
       <section className="mt-8">
         <h2 className="text-lg font-medium text-slate-800">Comparar</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Marque um ou mais eventos (grupo A). Eles são comparados com todos os outros eventos do período. Sem nada
+          Marque um ou mais eventos (selecionados). Eles são comparados com todos os outros eventos do período. Sem nada
           marcado, a tabela mostra o geral.
         </p>
         <ul className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -204,11 +219,11 @@ function Resultado({
             <tr className="border-b border-slate-300 text-left text-slate-600">
               <th className="py-2 pr-4 font-medium">Tema</th>
               <th className="py-2 pr-4 text-right font-medium">
-                {comparando ? `Grupo A (${A.total})` : `Geral (${A.total})`}
+                {tituloColuna("A", comparando ? `Selecionados (${A.total})` : `Geral (${A.total})`)}
               </th>
               {comparando && (
                 <>
-                  <th className="py-2 pr-4 text-right font-medium">Outros do período ({B.total})</th>
+                  <th className="py-2 pr-4 text-right font-medium">{tituloColuna("B", `Outros do período (${B.total})`)}</th>
                   <th className="py-2 text-right font-medium">Diferença</th>
                 </>
               )}
@@ -278,9 +293,6 @@ function Celula({ p, n }: { p: number; n: number }) {
   return (
     <td className="py-3 pr-4 text-right tabular-nums text-slate-800">
       {p.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}% <span className="text-slate-500">({n})</span>
-      <span className="mt-1 ml-auto block h-1 w-24 rounded-full bg-slate-100">
-        <span className="block h-1 rounded-full bg-[#0f4c64]" style={{ width: `${Math.min(100, p)}%` }} />
-      </span>
     </td>
   );
 }

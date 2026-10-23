@@ -6,7 +6,7 @@ comparar um grupo de eventos com os outros do período.
 ## Decisões
 
 - Vale, por ora, para **texto livre** e **nuvem**. Múltipla, seleção, escala e número virão depois, sem IA (contagem direta).
-- **Grupo A** = um ou mais eventos marcados. **Grupo B** = todos os outros eventos do período, menos os marcados.
+- **Selecionados** = um ou mais eventos marcados. **Outros do período** = todos os outros eventos do período, menos os marcados.
   Sem nada marcado, a tabela mostra só a coluna Geral.
 - A IA define **um único conjunto de temas** (5 a 8, mais Outros) para todas as turmas, e classifica cada resposta
   (texto livre) ou cada palavra (nuvem). Quem conta é o Pulse: % das **pessoas** de cada grupo com algum item no tema.
@@ -30,4 +30,6 @@ comparar um grupo de eventos com os outros do período.
 
 - Página do modelo: botão **Consolidado** nas perguntas de texto livre e nuvem já usadas em eventos.
 - `/painel/biblioteca/[id]/pergunta/[perguntaId]/consolidado`: período e geração, síntese, aviso de respostas novas,
-  marcação do grupo A, tabela Tema × grupos com exemplos de cada tema.
+  marcação dos selecionados, tabela Tema × grupos (só números) com exemplos de cada tema. Clicar no título de
+  Selecionados/Geral ou de Outros do período ordena: maior primeiro, menor primeiro, volta à ordem da IA. Outros fica
+  sempre no fim.
